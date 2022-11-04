@@ -1,0 +1,4 @@
+[[table]]
+database = "foo"
+table = "foo"
+col = 0
