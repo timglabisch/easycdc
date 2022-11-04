@@ -1,14 +1,14 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
 use anyhow::Context;
 use config::Config;
 use mysql::binlog::events::EventData;
 use mysql::consts::ColumnFlags;
 use mysql::prelude::*;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use structopt::StructOpt;
 
-mod tablemap;
 mod config;
+mod tablemap;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "example", about = "An example of StructOpt usage.")]
@@ -18,9 +18,8 @@ struct Opt {
 }
 
 fn main() -> Result<(), ::anyhow::Error> {
-
     let opt = Opt::from_args();
-    
+
     let config = Config::from_file(&opt.config)?;
 
     println!("config : {:#?}", &config);
@@ -64,7 +63,7 @@ fn main() -> Result<(), ::anyhow::Error> {
         match data {
             EventData::TableMapEvent(t) => {
                 table_maps.insert(t.table_id(), t.into_owned());
-            },
+            }
             EventData::RowsEvent(row_event) => {
                 // println!("row event {:#?}", row_event);
                 let table = match table_maps.get(&row_event.table_id()) {
@@ -89,17 +88,15 @@ fn main() -> Result<(), ::anyhow::Error> {
                     match row {
                         (Some(before), Some(after)) => {
                             println!("update!");
-                        },
+                        }
                         (Some(before), None) => {
                             println!("delete!");
-                        },
+                        }
                         (None, Some(after)) => {
                             println!("insert!");
-                        },
-                        _ => unreachable!()
+                        }
+                        _ => unreachable!(),
                     };
-
-
                 }
 
                 let a = 0;
