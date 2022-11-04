@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
+use crate::tablemap::TableMap;
+
 mod config;
 mod tablemap;
 
@@ -32,7 +34,8 @@ fn main() -> Result<(), ::anyhow::Error> {
 
     let mut binlog_stream = conn.get_binlog_stream(::mysql::BinlogRequest::new(1))?;
 
-    let mut table_maps = HashMap::new();
+
+    let mut tablemap = TableMap::from_config(&config);
 
     loop {
         let item = match binlog_stream.next() {
@@ -58,23 +61,33 @@ fn main() -> Result<(), ::anyhow::Error> {
             }
         };
 
+    
+
         let timestamp = item.header().timestamp();
 
         match data {
             EventData::TableMapEvent(t) => {
-                table_maps.insert(t.table_id(), t.into_owned());
+                tablemap.record_table_map_event(&t);
             }
             EventData::RowsEvent(row_event) => {
-                // println!("row event {:#?}", row_event);
-                let table = match table_maps.get(&row_event.table_id()) {
-                    Some(s) => s,
+
+                let table_info = match tablemap.get_cdc_info(&row_event.table_id()) {
                     None => {
-                        println!("binlog event for unknwon table");
                         continue;
-                    }
+                    },
+                    Some(s) => s
                 };
 
-                let rows = row_event.rows(table);
+                let table_config = match table_info.table_config {
+                    None => {
+                        println!("skip table ...");
+                        continue;
+                    }, 
+                    Some(ref s) => s,
+                };
+
+
+                let rows = row_event.rows(&table_info.table_map_event);
 
                 for row in rows {
                     let (row) = match row {
