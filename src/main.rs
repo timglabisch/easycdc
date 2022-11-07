@@ -11,6 +11,7 @@ use crate::tablemap::TableMap;
 
 mod config;
 mod tablemap;
+mod sink;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "example", about = "An example of StructOpt usage.")]
@@ -100,7 +101,10 @@ fn main() -> Result<(), ::anyhow::Error> {
 
                     match row {
                         (Some(before), Some(after)) => {
-                            println!("update!");
+                            let col = &before.columns_ref()[table_config.col as usize];
+                            let val0 = before.as_ref(0).unwrap();
+                    
+                            println!("update! {:?}", val0);
                         }
                         (Some(before), None) => {
                             println!("delete!");
