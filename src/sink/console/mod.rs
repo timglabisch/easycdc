@@ -1,6 +1,6 @@
-use mysql::{binlog::value::BinlogValue, Value};
+use mysql::{binlog::{value::BinlogValue, row::BinlogRow, events::TableMapEvent}, Value};
 
-use crate::tablemap::TableInfo;
+use crate::{tablemap::TableInfo, config::ConfigTable};
 
 struct SinkConsoleJsonValue<'a> {
     table_info: TableInfo<'a>,
@@ -9,8 +9,24 @@ struct SinkConsoleJsonValue<'a> {
 }
 
 impl<'a> SinkConsoleJsonValue<'a> {
-    pub fn from_row() {
+    pub fn from_row(
+        table_config: &ConfigTable, 
+        table_map: TableMapEvent<'a>, 
+        before: Option<BinlogRow>, 
+        after: Option<BinlogRow>
+    ) {
+        let before = match before {
+            None => vec![],
+            Some(before) => {
+                table_config.cols.iter().map(|col| {
+                    before.as_ref(col.clone() as usize)
+                }).collect::<Vec<_>>()
+            }
+        };
         
+        Self {
+            table_info: table_info,
+        }
     }
 }
 

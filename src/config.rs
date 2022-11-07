@@ -5,7 +5,7 @@ use serde_derive::Deserialize;
 pub struct ConfigTable {
     pub database: String,
     pub table: String,
-    pub col: u32,
+    pub cols: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
