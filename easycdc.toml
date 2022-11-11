@@ -1,4 +1,4 @@
 [[table]]
 database = "foo"
 table = "foo1"
-col = 0
+cols = [0]

@@ -2,41 +2,46 @@ use mysql::{binlog::{value::BinlogValue, row::BinlogRow, events::TableMapEvent},
 
 use crate::{tablemap::TableInfo, config::ConfigTable};
 
-struct SinkConsoleJsonValue<'a> {
-    table_info: TableInfo<'a>,
-    before: Vec<BinlogValue<'a>>,
-    after: Vec<BinlogValue<'a>>,
+pub struct SinkConsoleJsonValue<'a> {
+    pub table_map_event: &'a TableMapEvent<'a>,
+    pub table_config: &'a ConfigTable,
+    before: Vec<Option<&'a BinlogValue<'a>>>,
+    after: Vec<Option<&'a BinlogValue<'a>>>,
 }
 
 impl<'a> SinkConsoleJsonValue<'a> {
-    pub fn from_row(
-        table_config: &ConfigTable, 
-        table_map: TableMapEvent<'a>, 
-        before: Option<BinlogRow>, 
-        after: Option<BinlogRow>
-    ) {
-        let before = match before {
+    pub fn match_row(table_config: &ConfigTable, row: &'a Option<BinlogRow>) -> Vec<Option<&'a BinlogValue<'a>>> {
+        match row {
             None => vec![],
             Some(before) => {
                 table_config.cols.iter().map(|col| {
                     before.as_ref(col.clone() as usize)
                 }).collect::<Vec<_>>()
             }
-        };
-        
+        }
+    }
+
+    pub fn from_row(
+        table_config: &'a ConfigTable,
+        table_map_event: &'a TableMapEvent<'a>,
+        before: &'a Option<BinlogRow>,
+        after: &'a Option<BinlogRow>,
+    ) -> Self {
         Self {
-            table_info: table_info,
+            table_config,
+            table_map_event,
+            before: Self::match_row(table_config, &before),
+            after: Self::match_row(table_config, &after),
         }
     }
 }
 
-impl <'a> SinkConsoleJsonValue<'a> {
+impl<'a> SinkConsoleJsonValue<'a> {
     pub fn to_json(&self) -> serde_json::Value {
-
-        let db = self.table_info.table_map_event.database_name(); 
-        let table = self.table_info.table_map_event.table_name();
+        let db = self.table_map_event.database_name();
+        let table = self.table_map_event.table_name();
         let before = self.before.iter().map(|v| Self::binlog_value_to_json(v)).collect::<Vec<_>>();
-        let after = self.before.iter().map(|v| Self::binlog_value_to_json(v)).collect::<Vec<_>>();
+        let after = self.after.iter().map(|v| Self::binlog_value_to_json(v)).collect::<Vec<_>>();
 
 
         serde_json::json!({
@@ -47,24 +52,27 @@ impl <'a> SinkConsoleJsonValue<'a> {
         })
     }
 
-    pub fn binlog_value_to_json(value : &BinlogValue) -> serde_json::Value {
+    pub fn binlog_value_to_json(value: &Option<&BinlogValue>) -> serde_json::Value {
         match value {
-            BinlogValue::Value(v) => match v {
-                Value::Int(v) => serde_json::json!(v),
-                Value::Double(v) => serde_json::json!(v),
-                Value::Float(v) => serde_json::json!(v),
-                Value::UInt(v) => serde_json::json!(v),
-                Value::NULL => serde_json::Value::Null,
-                Value::Bytes(ref bytes) => {
-                    if bytes.len() <= 8 {
-                        serde_json::json!(String::from_utf8_lossy(&*bytes))
-                    } else {
-                        serde_json::json!(String::from_utf8_lossy(&bytes[..8]))
-                    }
-                }
+            None => serde_json::Value::Null,
+            Some(v) => match v {
+                BinlogValue::Value(v) => match v {
+                    Value::Int(v) => serde_json::json!(v),
+                    Value::Double(v) => serde_json::json!(v),
+                    Value::Float(v) => serde_json::json!(v),
+                    Value::UInt(v) => serde_json::json!(v),
+                    Value::NULL => serde_json::Value::Null,
+                    Value::Bytes(ref bytes) => {
+                        if bytes.len() <= 8 {
+                            serde_json::json!(String::from_utf8_lossy(&*bytes))
+                        } else {
+                            serde_json::json!(String::from_utf8_lossy(&bytes[..8]))
+                        }
+                    },
+                    _ => serde_json::Value::Null,
+                },
                 _ => serde_json::Value::Null,
-            },
-            _ => serde_json::Value::Null,
+            }
         }
     }
 }

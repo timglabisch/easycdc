@@ -6,6 +6,7 @@ use mysql::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use crate::sink::console::SinkConsoleJsonValue;
 
 use crate::tablemap::TableMap;
 
@@ -24,9 +25,7 @@ fn main() -> Result<(), ::anyhow::Error> {
     let opt = Opt::from_args();
 
     let config = Config::from_file(&opt.config)?;
-
-    println!("config : {:#?}", &config);
-
+    
     let url = "mysql://root:password@localhost:3306/foo";
 
     let pool = ::mysql::Pool::new(url)?;
@@ -83,15 +82,14 @@ fn main() -> Result<(), ::anyhow::Error> {
                     None => {
                         println!("skip table ...");
                         continue;
-                    }, 
+                    },
                     Some(ref s) => s,
                 };
-
 
                 let rows = row_event.rows(&table_info.table_map_event);
 
                 for row in rows {
-                    let (row) = match row {
+                    let (before, after)= match row {
                         Ok(k) => k,
                         Err(e) => {
                             println!("could not decode row");
@@ -99,24 +97,16 @@ fn main() -> Result<(), ::anyhow::Error> {
                         }
                     };
 
-                    match row {
-                        (Some(before), Some(after)) => {
-                            let col = &before.columns_ref()[table_config.col as usize];
-                            let val0 = before.as_ref(0).unwrap();
-                    
-                            println!("update! {:?}", val0);
-                        }
-                        (Some(before), None) => {
-                            println!("delete!");
-                        }
-                        (None, Some(after)) => {
-                            println!("insert!");
-                        }
-                        _ => unreachable!(),
-                    };
-                }
 
-                let a = 0;
+                    let v = SinkConsoleJsonValue::from_row(
+                        table_config,
+                        &table_info.table_map_event,
+                        &before,
+                        &after
+                    );
+
+                    println!("{}", v.to_json());
+                }
             }
             _ => {
                 // println!("data {:#?}", data);
