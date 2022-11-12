@@ -14,3 +14,5 @@ serde_derive = "*"
 serde_json = "*"
 toml = "*"
 structopt = { version = "0.3", default-features = true }
+uuid = "1.*"
+mysql_common = "0.*"

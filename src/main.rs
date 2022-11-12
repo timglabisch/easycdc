@@ -5,7 +5,10 @@ use mysql::consts::ColumnFlags;
 use mysql::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use mysql::BinlogDumpFlags;
+use mysql_common::packets::Interval;
 use structopt::StructOpt;
+use crate::gtid::format_gtid;
 use crate::sink::console::SinkConsoleJsonValue;
 
 use crate::tablemap::TableMap;
@@ -13,6 +16,7 @@ use crate::tablemap::TableMap;
 mod config;
 mod tablemap;
 mod sink;
+mod gtid;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "example", about = "An example of StructOpt usage.")]
@@ -25,15 +29,37 @@ fn main() -> Result<(), ::anyhow::Error> {
     let opt = Opt::from_args();
 
     let config = Config::from_file(&opt.config)?;
-    
+
     let url = "mysql://root:password@localhost:3306/foo";
 
     let pool = ::mysql::Pool::new(url)?;
 
     let mut conn = pool.get_conn()?;
 
-    let mut binlog_stream = conn.get_binlog_stream(::mysql::BinlogRequest::new(1))?;
-
+    let mut binlog_stream = conn.get_binlog_stream(
+        ::mysql::BinlogRequest::new(1)
+            .with_use_gtid(true)
+            /*.with_sids(vec![
+                ::mysql_common::packets::Sid::new([
+                    177,
+                    165,
+                    142,
+                    39,
+                    97,
+                    182,
+                    17,
+                    237,
+                    160,
+                    50,
+                    2,
+                    66,
+                    172,
+                    17,
+                    0,
+                    2,
+                ]).with_interval(Interval::new(1, 6))
+            ])*/
+    )?;
 
     let mut tablemap = TableMap::from_config(&config);
 
@@ -108,6 +134,21 @@ fn main() -> Result<(), ::anyhow::Error> {
                     println!("{}", v.to_json());
                 }
             }
+            EventData::XidEvent(xid_event) => {
+                println!("xid");
+            },
+            EventData::GtidEvent(gtid_event) => {
+
+                let sid = gtid_event.sid();
+                // dbg!(sid);
+
+                dbg!(format_gtid(sid));
+                dbg!(gtid_event.sequence_number());
+                dbg!(gtid_event.sequence_number());
+            },
+            EventData::QueryEvent(e) => {
+                // println!("{:#?}", e);
+            },
             _ => {
                 // println!("data {:#?}", data);
             }
