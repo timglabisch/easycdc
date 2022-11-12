@@ -16,3 +16,6 @@ toml = "*"
 structopt = { version = "0.3", default-features = true }
 uuid = "1.*"
 mysql_common = "0.*"
+tokio = {version = "1.*", features = ["full"]}
+lazy_static = "1.*"
+sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "mysql" ] }

@@ -17,6 +17,7 @@ mod config;
 mod tablemap;
 mod sink;
 mod gtid;
+mod test;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "example", about = "An example of StructOpt usage.")]
