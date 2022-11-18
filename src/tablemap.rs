@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::collections::HashMap;
 
 use fnv::FnvHashMap;
 use mysql::binlog::events::TableMapEvent;
@@ -7,7 +7,6 @@ use mysql::binlog::events::TableMapEvent;
 use crate::config::{Config, ConfigTable};
 
 type TableId = u64;
-
 
 pub struct TableInfo<'a> {
     pub table_map_event: TableMapEvent<'a>,
@@ -55,20 +54,21 @@ impl<'a> TableMap<'a> {
         match self.map_id_info.entry(event.table_id()) {
             Occupied(mut entry) => {
                 entry.get_mut().table_map_event = event.clone().into_owned();
-            }, 
+            }
             Vacant(mut entry) => {
-
-                let table_config = self.map_name_shouldcdc.get(&DatabaseTable {
-                    table: event.table_name().to_string(),
-                    database: event.database_name().to_string(),
-                }).map(|x|x.clone());
+                let table_config = self
+                    .map_name_shouldcdc
+                    .get(&DatabaseTable {
+                        table: event.table_name().to_string(),
+                        database: event.database_name().to_string(),
+                    })
+                    .map(|x| x.clone());
 
                 entry.insert(TableInfo {
                     table_map_event: event.clone().into_owned(),
                     table_config,
                 });
             }
-
         };
     }
 }

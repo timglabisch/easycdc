@@ -1,6 +1,9 @@
-use mysql::{binlog::{value::BinlogValue, row::BinlogRow, events::TableMapEvent}, Value};
+use mysql::{
+    binlog::{events::TableMapEvent, row::BinlogRow, value::BinlogValue},
+    Value,
+};
 
-use crate::{tablemap::TableInfo, config::ConfigTable};
+use crate::{config::ConfigTable, tablemap::TableInfo};
 
 pub struct SinkConsoleJsonValue<'a> {
     pub table_map_event: &'a TableMapEvent<'a>,
@@ -10,14 +13,17 @@ pub struct SinkConsoleJsonValue<'a> {
 }
 
 impl<'a> SinkConsoleJsonValue<'a> {
-    pub fn match_row(table_config: &ConfigTable, row: &'a Option<BinlogRow>) -> Vec<Option<&'a BinlogValue<'a>>> {
+    pub fn match_row(
+        table_config: &ConfigTable,
+        row: &'a Option<BinlogRow>,
+    ) -> Vec<Option<&'a BinlogValue<'a>>> {
         match row {
             None => vec![],
-            Some(before) => {
-                table_config.cols.iter().map(|col| {
-                    before.as_ref(col.clone() as usize)
-                }).collect::<Vec<_>>()
-            }
+            Some(before) => table_config
+                .cols
+                .iter()
+                .map(|col| before.as_ref(col.clone() as usize))
+                .collect::<Vec<_>>(),
         }
     }
 
@@ -40,9 +46,16 @@ impl<'a> SinkConsoleJsonValue<'a> {
     pub fn to_json(&self) -> serde_json::Value {
         let db = self.table_map_event.database_name();
         let table = self.table_map_event.table_name();
-        let before = self.before.iter().map(|v| Self::binlog_value_to_json(v)).collect::<Vec<_>>();
-        let after = self.after.iter().map(|v| Self::binlog_value_to_json(v)).collect::<Vec<_>>();
-
+        let before = self
+            .before
+            .iter()
+            .map(|v| Self::binlog_value_to_json(v))
+            .collect::<Vec<_>>();
+        let after = self
+            .after
+            .iter()
+            .map(|v| Self::binlog_value_to_json(v))
+            .collect::<Vec<_>>();
 
         serde_json::json!({
             "db": db,
@@ -68,11 +81,11 @@ impl<'a> SinkConsoleJsonValue<'a> {
                         } else {
                             serde_json::json!(String::from_utf8_lossy(&bytes[..8]))
                         }
-                    },
+                    }
                     _ => serde_json::Value::Null,
                 },
                 _ => serde_json::Value::Null,
-            }
+            },
         }
     }
 }

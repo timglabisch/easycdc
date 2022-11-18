@@ -1,42 +1,48 @@
-use std::collections::HashMap;
-use std::time::Duration;
-use sqlx::MySqlPool;
 use crate::cdc::{CdcRunner, CdcStreamItem};
 use crate::config::{Config, ConfigTable};
 use crate::test::docker::DockerMysql;
+use sqlx::MySqlPool;
+use std::collections::HashMap;
+use std::time::Duration;
 
 mod docker;
 
 pub fn create_config() -> Config {
     Config {
         connection: "mysql://root:password@localhost:33069".to_string(),
-        table: vec![
-            ConfigTable {
-                table: "foo1".to_string(),
-                cols: vec![0],
-                database: "foo".to_string(),
-            }
-        ]
+        table: vec![ConfigTable {
+            table: "foo1".to_string(),
+            cols: vec![0],
+            database: "foo".to_string(),
+        }],
     }
 }
 
-pub async fn execute_queries(queries: Vec<String>, pool : &MySqlPool) {
+pub async fn execute_queries(queries: Vec<String>, pool: &MySqlPool) {
     for q in queries {
-        sqlx::query(&q).execute(pool).await.expect("could not execute query");
+        sqlx::query(&q)
+            .execute(pool)
+            .await
+            .expect("could not execute query");
     }
 }
 
-pub async fn up(pool : &MySqlPool) {
-    execute_queries(vec![
-        "create database foo;".to_string(),
-        r#"
+pub async fn up(pool: &MySqlPool) {
+    execute_queries(
+        vec![
+            "create database foo;".to_string(),
+            r#"
             create table foo.foo1 (
               id bigint AUTO_INCREMENT,
               val varchar(255) null,
               PRIMARY KEY (id)
             );
-        "#.to_string()
-    ], pool).await
+        "#
+            .to_string(),
+        ],
+        pool,
+    )
+    .await
 }
 
 pub enum TestFlow {
@@ -66,7 +72,8 @@ pub async fn test_insert_update() {
         TestFlow::Query("UPDATE foo.foo1 SET id = 3 WHERE id = 1;".to_string()),
         TestFlow::Expect(r#"{"after":[3],"before":[1],"db":"foo","table":"foo1"}"#.to_string()),
         TestFlow::ExpectGtidSequence(7),
-    ]).await;
+    ])
+    .await;
 }
 
 #[tokio::test]
@@ -75,10 +82,16 @@ pub async fn test_transaction_commit() {
         TestFlow::QueryTransaction(1, "BEGIN;".to_string()),
         TestFlow::ExpectNoEvent,
         TestFlow::ExpectGtidSequence(2),
-        TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::QueryTransaction(
+            1,
+            "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string(),
+        ),
         TestFlow::ExpectNoEvent,
         TestFlow::ExpectGtidSequence(2),
-        TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::QueryTransaction(
+            1,
+            "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string(),
+        ),
         TestFlow::ExpectNoEvent,
         TestFlow::ExpectGtidSequence(2),
         TestFlow::QueryTransaction(1, "COMMIT;".to_string()),
@@ -86,7 +99,8 @@ pub async fn test_transaction_commit() {
         TestFlow::ExpectGtidSequence(3),
         TestFlow::Expect(r#"{"after":[2],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
         TestFlow::ExpectGtidSequence(3),
-    ]).await;
+    ])
+    .await;
 }
 
 #[tokio::test]
@@ -95,13 +109,17 @@ pub async fn test_transaction_rollback() {
         TestFlow::QueryTransaction(1, "BEGIN;".to_string()),
         TestFlow::ExpectNoEvent,
         TestFlow::ExpectGtidSequence(2),
-        TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::QueryTransaction(
+            1,
+            "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string(),
+        ),
         TestFlow::ExpectNoEvent,
         TestFlow::ExpectGtidSequence(2),
         TestFlow::QueryTransaction(1, "ROLLBACK;".to_string()),
         TestFlow::ExpectNoEvent,
         TestFlow::ExpectGtidSequence(2),
-    ]).await;
+    ])
+    .await;
 }
 
 pub async fn test_runnter(flow_items: Vec<TestFlow>) {
@@ -112,12 +130,13 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
     let pool = mysql.get_pool().await.expect("pool!");
 
     let row: (String,) = sqlx::query_as("SELECT @@version")
-        .fetch_one(&pool).await.expect("...");
+        .fetch_one(&pool)
+        .await
+        .expect("...");
 
     up(&pool).await;
 
     println!("okay, start cdc!");
-
 
     let (cdc_control_handle, mut cdc_stream) = CdcRunner::new(create_config()).run().await;
 
@@ -130,32 +149,46 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
             TestFlow::QueryTransaction(id, q) if q.trim_end_matches(";").trim() == "BEGIN" => {
                 let con = pool.begin().await.expect("could not fetch transaction");
                 transactions.insert(id, con);
-            },
+            }
             TestFlow::QueryTransaction(id, q) if q.trim_end_matches(";").trim() == "COMMIT" => {
-                transactions.remove_entry(&id).expect("could bot get transaction").1.commit().await.expect("could not commit!");
-            },
+                transactions
+                    .remove_entry(&id)
+                    .expect("could bot get transaction")
+                    .1
+                    .commit()
+                    .await
+                    .expect("could not commit!");
+            }
             TestFlow::QueryTransaction(id, q) if q.trim_end_matches(";").trim() == "ROLLBACK" => {
-                transactions.remove_entry(&id).expect("could bot get transaction").1.rollback().await.expect("could not commit!");
-            },
+                transactions
+                    .remove_entry(&id)
+                    .expect("could bot get transaction")
+                    .1
+                    .rollback()
+                    .await
+                    .expect("could not commit!");
+            }
             TestFlow::QueryTransaction(id, q) => {
-                let transaction = transactions.get_mut(&id).expect("could bot get transaction");
+                let transaction = transactions
+                    .get_mut(&id)
+                    .expect("could bot get transaction");
                 sqlx::query(&q).execute(transaction).await.unwrap();
-            },
+            }
             TestFlow::Query(q) => {
                 sqlx::query(&q).execute(&pool).await.unwrap();
-            },
+            }
             TestFlow::ExpectNoEvent => {
                 // we need to wait a bit for events ...
                 ::tokio::time::sleep(Duration::from_millis(200)).await;
 
                 let v = loop {
-                     match cdc_stream.try_recv() {
+                    match cdc_stream.try_recv() {
                         Ok(CdcStreamItem::Value(v)) => break v,
                         Ok(CdcStreamItem::Gtid(gtid)) => {
                             // just consume gtid's
                             sequence_number = gtid.sequence_number;
                             continue;
-                        },
+                        }
                         Err(_) => continue 'mainloop,
                     };
                 };
@@ -175,15 +208,15 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
                             }
                             assert_eq!(expect, v);
                             break;
-                        },
+                        }
                         Some(CdcStreamItem::Gtid(gtid)) => {
                             // just consume gtid's
                             sequence_number = gtid.sequence_number;
                             continue;
-                        },
+                        }
                     };
-                };
-            },
+                }
+            }
             TestFlow::ExpectGtidSequence(expected_sequence) => {
                 assert_eq!(expected_sequence, sequence_number);
             }
