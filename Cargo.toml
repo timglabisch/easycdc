@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 mysql = "*"
-anyhow = "*"
+anyhow = "1.0.60"
 fnv = "1.*"
 serde = "*"
 serde_derive = "*"

@@ -46,7 +46,7 @@ impl DockerMysql {
 
         let pool = MySqlPoolOptions::new()
             .max_connections(5)
-            .connect("mysql://root:password@localhost").await.context("pool...")?;
+            .connect("mysql://root:password@localhost:33069").await.context("pool...")?;
 
         self.pool = Some(pool.clone());
 
