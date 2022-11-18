@@ -5,3 +5,5 @@ uri = "mysql://root:password@localhost:33069/foo"
 database = "foo"
 table = "foo1"
 cols = [0]
+
+[[sink_benchmark]]

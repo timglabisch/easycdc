@@ -12,6 +12,12 @@ pub struct ConfigTable {
 pub struct Config {
     pub table: Vec<ConfigTable>,
     pub connection: String,
+    pub sink_benchmark: Vec<ConfigSinkBenchmark>
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConfigSinkBenchmark {
+
 }
 
 impl Config {

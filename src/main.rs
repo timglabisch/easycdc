@@ -10,6 +10,7 @@ use mysql_common::packets::Interval;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use crate::control_handle::ControlHandle;
 
 use crate::tablemap::TableMap;
 
@@ -19,6 +20,7 @@ mod gtid;
 mod sink;
 mod tablemap;
 mod test;
+mod control_handle;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "example", about = "An example of StructOpt usage.")]
@@ -29,6 +31,8 @@ struct Opt {
 
 fn main() -> Result<(), ::anyhow::Error> {
     let opt = Opt::from_args();
+
+    let x = ControlHandle::new();
 
     let config = Config::from_file(&opt.config)?;
 
