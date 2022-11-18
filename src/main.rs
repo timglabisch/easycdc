@@ -32,7 +32,7 @@ fn main() -> Result<(), ::anyhow::Error> {
 
     let config = Config::from_file(&opt.config)?;
 
-    let url = "mysql://root:password@localhost:33069/foo";
+    // let cdc_runn
 
 
 

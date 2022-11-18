@@ -11,6 +11,7 @@ pub enum CdcRunnerControlMsg {
 
 }
 
+#[derive(Debug)]
 pub enum CdcStreamItem {
     Value(String),
 }
@@ -45,11 +46,11 @@ impl CdcRunner {
         }
     }
 
-    pub async fn run(mut self) -> (CdcRunnerControlHandle, Receiver<CdcStreamItem>) {
+    pub async fn run(mut self) -> (CdcRunnerControlHandle, ::tokio::sync::mpsc::Receiver<CdcStreamItem>) {
         let config = self.config.clone();
         let mut control_handle_recv = self.control_handle_recv.take().expect("we consume ourself, must be given!");
 
-        let (cdc_stream_sender, cdc_stream_recv)  = channel();
+        let (cdc_stream_sender, cdc_stream_recv)  = ::tokio::sync::mpsc::channel(20000);
 
         self.cdc_thread = Some(::std::thread::spawn(move || {
             match Self::inner_run(config, cdc_stream_sender) {
@@ -73,7 +74,7 @@ impl CdcRunner {
         (control_handle, cdc_stream_recv)
     }
 
-    fn inner_run(config: Config, cdc_stream_sender: Sender<CdcStreamItem>) -> Result<(), ::anyhow::Error> {
+    fn inner_run(config: Config, cdc_stream_sender: ::tokio::sync::mpsc::Sender<CdcStreamItem>) -> Result<(), ::anyhow::Error> {
         let pool = ::mysql::Pool::new(config.connection.as_str())?;
 
         let mut conn = pool.get_conn()?;
@@ -171,7 +172,7 @@ impl CdcRunner {
                             &after
                         );
 
-                        cdc_stream_sender.send(CdcStreamItem::Value(v.to_json().to_string())).context("could not send to channel")?
+                        cdc_stream_sender.try_send(CdcStreamItem::Value(v.to_json().to_string())).context("could not send to channel")?
 
                         //println!("{}", v.to_json());
                     }
