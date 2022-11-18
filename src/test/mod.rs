@@ -44,33 +44,48 @@ pub enum TestFlow {
     QueryTransaction(usize, String),
     Expect(String),
     ExpectNoEvent,
+    ExpectGtidSequence(u64),
 }
 
 #[tokio::test]
 pub async fn test_insert_update() {
     test_runnter(vec![
-       TestFlow::Query("INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
-       TestFlow::Expect(r#"{"after":[1],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
-       TestFlow::Query("INSERT INTO foo.foo1 (val) VALUES ('abcd');".to_string()),
-       TestFlow::Expect(r#"{"after":[2],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
-       TestFlow::Query("UPDATE foo.foo1 SET val = 'updated' WHERE id = 2;".to_string()),
-       TestFlow::Expect(r#"{"after":[2],"before":[2],"db":"foo","table":"foo1"}"#.to_string()),
-       TestFlow::Query("UPDATE foo.foo1 SET val = 'updated!'".to_string()),
-       TestFlow::Expect(r#"{"after":[1],"before":[1],"db":"foo","table":"foo1"}"#.to_string()),
-       TestFlow::Expect(r#"{"after":[2],"before":[2],"db":"foo","table":"foo1"}"#.to_string()),
-       TestFlow::Query("UPDATE foo.foo1 SET id = 3 WHERE id = 1;".to_string()),
-       TestFlow::Expect(r#"{"after":[3],"before":[1],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::Query("INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::Expect(r#"{"after":[1],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::ExpectGtidSequence(3),
+        TestFlow::Query("INSERT INTO foo.foo1 (val) VALUES ('abcd');".to_string()),
+        TestFlow::Expect(r#"{"after":[2],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::ExpectGtidSequence(4),
+        TestFlow::Query("UPDATE foo.foo1 SET val = 'updated' WHERE id = 2;".to_string()),
+        TestFlow::Expect(r#"{"after":[2],"before":[2],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::ExpectGtidSequence(5),
+        TestFlow::Query("UPDATE foo.foo1 SET val = 'updated!'".to_string()),
+        TestFlow::Expect(r#"{"after":[1],"before":[1],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::Expect(r#"{"after":[2],"before":[2],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::ExpectGtidSequence(6),
+        TestFlow::Query("UPDATE foo.foo1 SET id = 3 WHERE id = 1;".to_string()),
+        TestFlow::Expect(r#"{"after":[3],"before":[1],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::ExpectGtidSequence(7),
     ]).await;
 }
 
 #[tokio::test]
-pub async fn test_transaction() {
+pub async fn test_transaction_commit() {
     test_runnter(vec![
         TestFlow::QueryTransaction(1, "BEGIN;".to_string()),
+        TestFlow::ExpectNoEvent,
+        TestFlow::ExpectGtidSequence(2),
         TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
         TestFlow::ExpectNoEvent,
+        TestFlow::ExpectGtidSequence(2),
+        TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::ExpectNoEvent,
+        TestFlow::ExpectGtidSequence(2),
         TestFlow::QueryTransaction(1, "COMMIT;".to_string()),
         TestFlow::Expect(r#"{"after":[1],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::ExpectGtidSequence(3),
+        TestFlow::Expect(r#"{"after":[2],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
+        TestFlow::ExpectGtidSequence(3),
     ]).await;
 }
 
@@ -103,7 +118,9 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
 
     let mut transactions = HashMap::new();
 
-    for flow_item in flow_items {
+    let mut sequence_number = 0;
+
+    'mainloop: for flow_item in flow_items {
         match flow_item {
             TestFlow::QueryTransaction(id, q) if q.trim_end_matches(";").trim() == "BEGIN" => {
                 let con = pool.begin().await.expect("could not fetch transaction");
@@ -126,34 +143,44 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
                 // we need to wait a bit for events ...
                 ::tokio::time::sleep(Duration::from_millis(200)).await;
 
-                let item = match cdc_stream.try_recv() {
-                    Ok(item) => item,
-                    Err(_) => continue,
+                let v = loop {
+                     match cdc_stream.try_recv() {
+                        Ok(CdcStreamItem::Value(v)) => break v,
+                        Ok(CdcStreamItem::Gtid(gtid)) => {
+                            // just consume gtid's
+                            sequence_number = gtid.sequence_number;
+                            continue;
+                        },
+                        Err(_) => continue 'mainloop,
+                    };
                 };
 
-                match item {
-                    CdcStreamItem::Value(v) => {
-                        mysql.stop_cdc().await;
-                        mysql.stop_mysql().await;
-                        assert_eq!("", v)
-                    }
-                };
+                mysql.stop_cdc().await;
+                mysql.stop_mysql().await;
+                assert_eq!("", v)
             }
             TestFlow::Expect(expect) => {
-                let item = match cdc_stream.recv().await {
-                    None => continue,
-                    Some(s) => s,
+                loop {
+                    match cdc_stream.recv().await {
+                        None => continue,
+                        Some(CdcStreamItem::Value(v)) => {
+                            if expect != v {
+                                mysql.stop_cdc().await;
+                                mysql.stop_mysql().await;
+                            }
+                            assert_eq!(expect, v);
+                            break;
+                        },
+                        Some(CdcStreamItem::Gtid(gtid)) => {
+                            // just consume gtid's
+                            sequence_number = gtid.sequence_number;
+                            continue;
+                        },
+                    };
                 };
-
-                match item {
-                    CdcStreamItem::Value(v) => {
-                        if expect != v {
-                            mysql.stop_cdc().await;
-                            mysql.stop_mysql().await;
-                        }
-                        assert_eq!(expect, v)
-                    }
-                };
+            },
+            TestFlow::ExpectGtidSequence(expected_sequence) => {
+                assert_eq!(expected_sequence, sequence_number);
             }
         }
     }

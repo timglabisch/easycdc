@@ -12,8 +12,15 @@ pub enum CdcRunnerControlMsg {
 }
 
 #[derive(Debug)]
+pub struct CdcStreamItemGtid {
+    pub uuid: [u8; 16],
+    pub sequence_number : u64,
+}
+
+#[derive(Debug)]
 pub enum CdcStreamItem {
     Value(String),
+    Gtid(CdcStreamItemGtid),
 }
 
 #[derive(Clone)]
@@ -185,9 +192,15 @@ impl CdcRunner {
                     let sid = gtid_event.sid();
                     // dbg!(sid);
 
-                    dbg!(format_gtid(sid));
-                    dbg!(gtid_event.sequence_number());
-                    dbg!(gtid_event.sequence_number());
+                    // dbg!(format_gtid(sid));
+                    // dbg!(gtid_event.sequence_number());
+                    // dbg!(gtid_event.sequence_number());
+
+                    cdc_stream_sender.try_send(CdcStreamItem::Gtid(CdcStreamItemGtid {
+                        uuid: gtid_event.sid(),
+                        sequence_number: gtid_event.sequence_number(),
+                    })).context("could not send to channel");
+
                 },
                 EventData::QueryEvent(e) => {
                     // println!("{:#?}", e);
