@@ -93,9 +93,14 @@ pub async fn test_transaction_commit() {
 pub async fn test_transaction_rollback() {
     test_runnter(vec![
         TestFlow::QueryTransaction(1, "BEGIN;".to_string()),
+        TestFlow::ExpectNoEvent,
+        TestFlow::ExpectGtidSequence(2),
         TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::ExpectNoEvent,
+        TestFlow::ExpectGtidSequence(2),
         TestFlow::QueryTransaction(1, "ROLLBACK;".to_string()),
         TestFlow::ExpectNoEvent,
+        TestFlow::ExpectGtidSequence(2),
     ]).await;
 }
 
