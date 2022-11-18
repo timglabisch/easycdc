@@ -86,4 +86,20 @@ impl DockerMysql {
 
         self.child = None;
     }
+
+    pub async fn stop_cdc(&mut self) {
+        let pool = self.get_pool().await.expect("could not get pool");
+
+        #[derive(sqlx::FromRow)]
+        struct Res {
+            pub id: u64,
+        }
+
+        let res = ::sqlx::query_as::<_, Res>(r#"SELECT ID as id FROM INFORMATION_SCHEMA.PROCESSLIST WHERE COMMAND = "Binlog Dump GTID";"#).fetch_all(&pool).await.expect("could not get processes");
+
+        for item in res {
+            sqlx::query(&format!("KILL {}", item.id)).execute(&pool).await.unwrap();
+        }
+
+    }
 }
