@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 use sqlx::MySqlPool;
 use crate::cdc::{CdcRunner, CdcStreamItem};
@@ -40,11 +41,13 @@ pub async fn up(pool : &MySqlPool) {
 
 pub enum TestFlow {
     Query(String),
+    QueryTransaction(usize, String),
     Expect(String),
+    ExpectNoEvent,
 }
 
 #[tokio::test]
-pub async fn test_integration() {
+pub async fn test_insert_update() {
     test_runnter(vec![
        TestFlow::Query("INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
        TestFlow::Expect(r#"{"after":[1],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
@@ -57,6 +60,27 @@ pub async fn test_integration() {
        TestFlow::Expect(r#"{"after":[2],"before":[2],"db":"foo","table":"foo1"}"#.to_string()),
        TestFlow::Query("UPDATE foo.foo1 SET id = 3 WHERE id = 1;".to_string()),
        TestFlow::Expect(r#"{"after":[3],"before":[1],"db":"foo","table":"foo1"}"#.to_string()),
+    ]).await;
+}
+
+#[tokio::test]
+pub async fn test_transaction() {
+    test_runnter(vec![
+        TestFlow::QueryTransaction(1, "BEGIN;".to_string()),
+        TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::ExpectNoEvent,
+        TestFlow::QueryTransaction(1, "COMMIT;".to_string()),
+        TestFlow::Expect(r#"{"after":[1],"before":[],"db":"foo","table":"foo1"}"#.to_string()),
+    ]).await;
+}
+
+#[tokio::test]
+pub async fn test_transaction_rollback() {
+    test_runnter(vec![
+        TestFlow::QueryTransaction(1, "BEGIN;".to_string()),
+        TestFlow::QueryTransaction(1, "INSERT INTO foo.foo1 (val) VALUES ('dfgdsfg');".to_string()),
+        TestFlow::QueryTransaction(1, "ROLLBACK;".to_string()),
+        TestFlow::ExpectNoEvent,
     ]).await;
 }
 
@@ -77,11 +101,44 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
 
     let (cdc_control_handle, mut cdc_stream) = CdcRunner::new(create_config()).run().await;
 
+    let mut transactions = HashMap::new();
+
     for flow_item in flow_items {
         match flow_item {
+            TestFlow::QueryTransaction(id, q) if q.trim_end_matches(";").trim() == "BEGIN" => {
+                let con = pool.begin().await.expect("could not fetch transaction");
+                transactions.insert(id, con);
+            },
+            TestFlow::QueryTransaction(id, q) if q.trim_end_matches(";").trim() == "COMMIT" => {
+                transactions.remove_entry(&id).expect("could bot get transaction").1.commit().await.expect("could not commit!");
+            },
+            TestFlow::QueryTransaction(id, q) if q.trim_end_matches(";").trim() == "ROLLBACK" => {
+                transactions.remove_entry(&id).expect("could bot get transaction").1.rollback().await.expect("could not commit!");
+            },
+            TestFlow::QueryTransaction(id, q) => {
+                let transaction = transactions.get_mut(&id).expect("could bot get transaction");
+                sqlx::query(&q).execute(transaction).await.unwrap();
+            },
             TestFlow::Query(q) => {
                 sqlx::query(&q).execute(&pool).await.unwrap();
             },
+            TestFlow::ExpectNoEvent => {
+                // we need to wait a bit for events ...
+                ::tokio::time::sleep(Duration::from_millis(200)).await;
+
+                let item = match cdc_stream.try_recv() {
+                    Ok(item) => item,
+                    Err(_) => continue,
+                };
+
+                match item {
+                    CdcStreamItem::Value(v) => {
+                        mysql.stop_cdc().await;
+                        mysql.stop_mysql().await;
+                        assert_eq!("", v)
+                    }
+                };
+            }
             TestFlow::Expect(expect) => {
                 let item = match cdc_stream.recv().await {
                     None => continue,

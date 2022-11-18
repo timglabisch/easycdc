@@ -5,3 +5,6 @@ start_mysql:
 		-p "3306:3306" \
 		--mount "type=bind,src=/$(CURDIR)/docker/mysql/my.cnf,dst=/etc/my.cnf" \
 		mysql/mysql-server:latest
+
+test:
+	docker kill easycdc_integration_1; cargo test -- --test-threads=1
