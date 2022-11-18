@@ -11,6 +11,7 @@ pub struct ConfigTable {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub table: Vec<ConfigTable>,
+    pub connection: String,
 }
 
 impl Config {
