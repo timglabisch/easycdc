@@ -6,6 +6,7 @@ use anyhow::Context;
 use mysql_common::binlog::events::EventData;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use tokio::task::JoinHandle;
+use crate::control_handle::{ControlHandle, ControlHandleReceiver};
 
 pub enum CdcRunnerControlMsg {}
 
@@ -21,45 +22,27 @@ pub enum CdcStreamItem {
     Gtid(CdcStreamItemGtid),
 }
 
-#[derive(Clone)]
-pub struct CdcRunnerControlHandle {
-    sender: ::tokio::sync::mpsc::UnboundedSender<CdcRunnerControlMsg>,
-}
 
 pub struct CdcRunner {
     pub config: Config,
-    pub control_handle: CdcRunnerControlHandle,
-    pub control_handle_recv: Option<::tokio::sync::mpsc::UnboundedReceiver<CdcRunnerControlMsg>>,
+    pub control_handle_recv: ControlHandleReceiver,
     pub cdc_thread: Option<::std::thread::JoinHandle<()>>,
 }
 
 impl CdcRunner {
-    pub fn new(config: Config) -> Self {
-        let (control_handle_sender, control_handle_recv) = ::tokio::sync::mpsc::unbounded_channel();
-
-        let control_handle = CdcRunnerControlHandle {
-            sender: control_handle_sender,
-        };
-
+    pub fn new(control_handle_recv: ControlHandleReceiver, config: Config) -> Self {
         Self {
             config,
-            control_handle,
-            control_handle_recv: Some(control_handle_recv),
+            control_handle_recv,
             cdc_thread: None,
         }
     }
 
     pub async fn run(
         mut self,
-    ) -> (
-        CdcRunnerControlHandle,
-        ::tokio::sync::mpsc::Receiver<CdcStreamItem>,
-    ) {
+    ) -> ::tokio::sync::mpsc::Receiver<CdcStreamItem>
+    {
         let config = self.config.clone();
-        let mut control_handle_recv = self
-            .control_handle_recv
-            .take()
-            .expect("we consume ourself, must be given!");
 
         let (cdc_stream_sender, cdc_stream_recv) = ::tokio::sync::mpsc::channel(20000);
 
@@ -74,15 +57,15 @@ impl CdcRunner {
             }
         }));
 
-        let control_handle = self.control_handle.clone();
+        let control_handle_recv = self.control_handle_recv.clone();
 
         ::tokio::task::spawn(async move {
             loop {
-                let x = control_handle_recv.recv().await;
+                let x = control_handle_recv.inner.recv().await;
             }
         });
 
-        (control_handle, cdc_stream_recv)
+        cdc_stream_recv
     }
 
     fn inner_run(

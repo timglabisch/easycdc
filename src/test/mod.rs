@@ -4,6 +4,7 @@ use crate::test::docker::DockerMysql;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
 use std::time::Duration;
+use crate::control_handle::ControlHandle;
 
 mod docker;
 
@@ -15,6 +16,7 @@ pub fn create_config() -> Config {
             cols: vec![0],
             database: "foo".to_string(),
         }],
+        sink_benchmark: vec![],
     }
 }
 
@@ -123,6 +125,9 @@ pub async fn test_transaction_rollback() {
 }
 
 pub async fn test_runnter(flow_items: Vec<TestFlow>) {
+
+    let (control_handle_sender, control_handle_recv) = ControlHandle::new();
+
     let mut mysql = DockerMysql::new(1).await;
 
     ::tokio::time::sleep(Duration::from_secs(10)).await;
@@ -138,7 +143,7 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
 
     println!("okay, start cdc!");
 
-    let (cdc_control_handle, mut cdc_stream) = CdcRunner::new(create_config()).run().await;
+    let mut cdc_stream = CdcRunner::new(control_handle_recv, create_config()).run().await;
 
     let mut transactions = HashMap::new();
 
