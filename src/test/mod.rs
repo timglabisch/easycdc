@@ -204,9 +204,8 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
             }
             TestFlow::Expect(expect) => {
                 loop {
-                    match cdc_stream.recv().await {
-                        None => continue,
-                        Some(CdcStreamItem::Value(v)) => {
+                    match cdc_stream.recv().await.expect("stream error") {
+                        CdcStreamItem::Value(v) => {
                             if expect != v {
                                 mysql.stop_cdc().await;
                                 mysql.stop_mysql().await;
@@ -214,7 +213,7 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
                             assert_eq!(expect, v);
                             break;
                         }
-                        Some(CdcStreamItem::Gtid(gtid)) => {
+                        CdcStreamItem::Gtid(gtid) => {
                             // just consume gtid's
                             sequence_number = gtid.sequence_number;
                             continue;

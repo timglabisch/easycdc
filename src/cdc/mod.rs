@@ -40,11 +40,11 @@ impl CdcRunner {
 
     pub async fn run(
         mut self,
-    ) -> ::tokio::sync::mpsc::Receiver<CdcStreamItem>
+    ) -> ::async_channel::Receiver<CdcStreamItem>
     {
         let config = self.config.clone();
 
-        let (cdc_stream_sender, cdc_stream_recv) = ::tokio::sync::mpsc::channel(20000);
+        let (cdc_stream_sender, cdc_stream_recv) = ::async_channel::bounded(20000);
 
         self.cdc_thread = Some(::std::thread::spawn(move || {
             match Self::inner_run(config, cdc_stream_sender) {
@@ -70,7 +70,7 @@ impl CdcRunner {
 
     fn inner_run(
         config: Config,
-        cdc_stream_sender: ::tokio::sync::mpsc::Sender<CdcStreamItem>,
+        cdc_stream_sender: ::async_channel::Sender<CdcStreamItem>,
     ) -> Result<(), ::anyhow::Error> {
         let pool = ::mysql::Pool::new(config.connection.as_str())?;
 
