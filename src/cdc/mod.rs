@@ -29,6 +29,8 @@ pub struct CdcRunner {
     pub cdc_thread: Option<::std::thread::JoinHandle<()>>,
 }
 
+pub type CdcStream = ::async_channel::Receiver<CdcStreamItem>;
+
 impl CdcRunner {
     pub fn new(control_handle_recv: ControlHandleReceiver, config: Config) -> Self {
         Self {
