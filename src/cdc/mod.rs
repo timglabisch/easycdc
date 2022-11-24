@@ -1,11 +1,13 @@
+use std::sync::atomic::Ordering;
 use crate::config::Config;
 use crate::gtid::format_gtid;
 use crate::sink::console::SinkConsoleJsonValue;
 use crate::tablemap::TableMap;
 use anyhow::Context;
-use mysql_common::binlog::events::EventData;
+use mysql_common::binlog::events::{EventData, RowsEvent, RowsEventData};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use tokio::task::JoinHandle;
+use crate::benchmark::{PERF_COUNTER_BINLOG_EVENT_GTID, PERF_COUNTER_BINLOG_EVENT_OTHER, PERF_COUNTER_BINLOG_EVENT_QUERY, PERF_COUNTER_BINLOG_EVENT_ROWS, PERF_COUNTER_BINLOG_EVENT_TABLEMAP, PERF_COUNTER_BINLOG_EVENT_XID, PERF_COUNTER_BINLOG_EVENTS, PERF_COUNTER_TABLE_SKIP, PERF_TIMER_BINLOG_FINISH, PERF_TIMER_BINLOG_READ_WAIT, PERF_TIMER_BINLOG_ROWS_EVENT};
 use crate::control_handle::{ControlHandle, ControlHandleReceiver};
 
 pub enum CdcRunnerControlMsg {}
@@ -103,7 +105,11 @@ impl CdcRunner {
 
         let mut tablemap = TableMap::from_config(&config);
 
+        let mut item_start = minstant::Instant::now();
         loop {
+            PERF_TIMER_BINLOG_FINISH.fetch_add(item_start.elapsed().as_millis() as u64, Ordering::Relaxed);
+            item_start = minstant::Instant::now();
+
             let item = match binlog_stream.next() {
                 Some(s) => s,
                 None => {
@@ -111,6 +117,8 @@ impl CdcRunner {
                     continue;
                 }
             };
+            PERF_COUNTER_BINLOG_EVENTS.fetch_add(1, Ordering::Relaxed);
+            PERF_TIMER_BINLOG_READ_WAIT.fetch_add(item_start.elapsed().as_millis() as u64, Ordering::Relaxed);
 
             let item = match item {
                 Ok(s) => s,
@@ -131,53 +139,25 @@ impl CdcRunner {
 
             match data {
                 EventData::TableMapEvent(t) => {
+                    PERF_COUNTER_BINLOG_EVENT_TABLEMAP.fetch_add(1, Ordering::Relaxed);
+
                     tablemap.record_table_map_event(&t);
                 }
                 EventData::RowsEvent(row_event) => {
-                    let table_info = match tablemap.get_cdc_info(&row_event.table_id()) {
-                        None => {
-                            continue;
-                        }
-                        Some(s) => s,
-                    };
+                    let mut start_rows_event = minstant::Instant::now();
+                    Self::on_rows_event(&mut tablemap, &row_event, &cdc_stream_sender);
+                    PERF_TIMER_BINLOG_ROWS_EVENT.fetch_add(start_rows_event.elapsed().as_millis() as u64, Ordering::Relaxed);
+                    PERF_COUNTER_BINLOG_EVENT_ROWS.fetch_add(1, Ordering::Relaxed);
 
-                    let table_config = match table_info.table_config {
-                        None => {
-                            println!("skip table ...");
-                            continue;
-                        }
-                        Some(ref s) => s,
-                    };
-
-                    let rows = row_event.rows(&table_info.table_map_event);
-
-                    for row in rows {
-                        let (before, after) = match row {
-                            Ok(k) => k,
-                            Err(e) => {
-                                println!("could not decode row");
-                                continue;
-                            }
-                        };
-
-                        let v = SinkConsoleJsonValue::from_row(
-                            table_config,
-                            &table_info.table_map_event,
-                            &before,
-                            &after,
-                        );
-
-                        cdc_stream_sender
-                            .try_send(CdcStreamItem::Value(v.to_json().to_string()))
-                            .context("could not send to channel")?
-
-                        //println!("{}", v.to_json());
-                    }
                 }
                 EventData::XidEvent(xid_event) => {
+                    PERF_COUNTER_BINLOG_EVENT_XID.fetch_add(1, Ordering::Relaxed);
+
                     // println!("xid");
                 }
                 EventData::GtidEvent(gtid_event) => {
+                    PERF_COUNTER_BINLOG_EVENT_GTID.fetch_add(1, Ordering::Relaxed);
+
                     let sid = gtid_event.sid();
                     // dbg!(sid);
 
@@ -193,12 +173,62 @@ impl CdcRunner {
                         .context("could not send to channel");
                 }
                 EventData::QueryEvent(e) => {
+                    PERF_COUNTER_BINLOG_EVENT_QUERY.fetch_add(1, Ordering::Relaxed);
+
                     // println!("{:#?}", e);
                 }
                 _ => {
+                    PERF_COUNTER_BINLOG_EVENT_OTHER.fetch_add(1, Ordering::Relaxed);
+
                     // println!("data {:#?}", data);
                 }
             };
         }
     }
+
+    fn on_rows_event(
+        tablemap : &mut TableMap,
+        row_event: &RowsEventData,
+        cdc_stream_sender: &::async_channel::Sender<CdcStreamItem>
+    ) {
+        let table_info = match tablemap.get_cdc_info(&row_event.table_id()) {
+            None => {
+                PERF_COUNTER_TABLE_SKIP.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+            Some(s) => s,
+        };
+
+        let table_config = match table_info.table_config {
+            None => {
+                PERF_COUNTER_TABLE_SKIP.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+            Some(ref s) => s,
+        };
+
+        let rows = row_event.rows(&table_info.table_map_event);
+
+        for row in rows {
+            let (before, after) = match row {
+                Ok(k) => k,
+                Err(e) => {
+                    println!("could not decode row");
+                    continue;
+                }
+            };
+
+            let v = SinkConsoleJsonValue::from_row(
+                table_config,
+                &table_info.table_map_event,
+                &before,
+                &after,
+            );
+
+            cdc_stream_sender
+                .try_send(CdcStreamItem::Value(v.to_json().to_string()))
+                .context("could not send to channel").expect("channel!")
+        }
+    }
+
 }

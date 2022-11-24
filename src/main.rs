@@ -24,6 +24,7 @@ mod sink;
 mod tablemap;
 mod test;
 mod control_handle;
+mod benchmark;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "example", about = "An example of StructOpt usage.")]
