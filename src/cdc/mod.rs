@@ -175,7 +175,7 @@ impl CdcRunner {
                     }
                 }
                 EventData::XidEvent(xid_event) => {
-                    println!("xid");
+                    // println!("xid");
                 }
                 EventData::GtidEvent(gtid_event) => {
                     let sid = gtid_event.sid();
