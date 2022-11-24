@@ -9,8 +9,11 @@ use mysql::BinlogDumpFlags;
 use mysql_common::packets::Interval;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 use structopt::StructOpt;
+use crate::cdc::CdcRunner;
 use crate::control_handle::ControlHandle;
+use crate::sink::sinks_initialize;
 
 use crate::tablemap::TableMap;
 
@@ -29,14 +32,20 @@ struct Opt {
     config: String,
 }
 
-fn main() -> Result<(), ::anyhow::Error> {
+#[tokio::main]
+async fn main() -> Result<(), ::anyhow::Error> {
     let opt = Opt::from_args();
 
-    let x = ControlHandle::new();
+    let (x, control_handle_recv) = ControlHandle::new();
 
     let config = Config::from_file(&opt.config)?;
 
-    // let cdc_runn
+    let mut cdc_stream = CdcRunner::new(control_handle_recv.clone(), config.clone()).run().await;
+
+    sinks_initialize(config, control_handle_recv, cdc_stream);
+
+    // wait ...
+    ::tokio::time::sleep(Duration::from_secs(100)).await;
 
     Ok(())
 }

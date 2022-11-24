@@ -1,5 +1,4 @@
-[connection]
-uri = "mysql://root:password@localhost:33069/foo"
+connection = "mysql://root:password@localhost:33069/foo"
 
 [[table]]
 database = "foo"
