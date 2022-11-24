@@ -29,7 +29,6 @@ impl SinkBenchmark {
             self.run_inner().await.expect("sink benchmark panic");
             let number_if_items = COUNTER.swap(0, Ordering::Relaxed);
 
-
         });
     }
 
