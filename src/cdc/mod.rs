@@ -144,11 +144,10 @@ impl CdcRunner {
                     tablemap.record_table_map_event(&t);
                 }
                 EventData::RowsEvent(row_event) => {
-                    let mut start_rows_event = minstant::Instant::now();
+                    let start_rows_event = minstant::Instant::now();
                     Self::on_rows_event(&mut tablemap, &row_event, &cdc_stream_sender);
                     PERF_TIMER_BINLOG_ROWS_EVENT.fetch_add(start_rows_event.elapsed().as_millis() as u64, Ordering::Relaxed);
                     PERF_COUNTER_BINLOG_EVENT_ROWS.fetch_add(1, Ordering::Relaxed);
-
                 }
                 EventData::XidEvent(xid_event) => {
                     PERF_COUNTER_BINLOG_EVENT_XID.fetch_add(1, Ordering::Relaxed);
