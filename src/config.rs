@@ -12,11 +12,11 @@ pub struct ConfigTable {
 pub struct Config {
     pub table: Vec<ConfigTable>,
     pub connection: String,
-    pub sink_benchmark: Option<ConfigSinkBenchmark>
+    pub sink_void: Option<ConfigSinkVoid>
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ConfigSinkBenchmark {
+pub struct ConfigSinkVoid {
 
 }
 

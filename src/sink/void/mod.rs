@@ -1,20 +1,20 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use crate::cdc::CdcStream;
-use crate::config::ConfigSinkBenchmark;
+use crate::config::ConfigSinkVoid;
 use crate::control_handle::ControlHandleReceiver;
 
 pub static COUNTER : AtomicU64 = AtomicU64::new(0);
 
-pub struct SinkBenchmark {
-    config: ConfigSinkBenchmark,
+pub struct SinkVoid {
+    config: ConfigSinkVoid,
     control_handle_receiver: ControlHandleReceiver,
     cdc_stream: CdcStream,
 }
 
-impl SinkBenchmark {
+impl SinkVoid {
     pub fn new(
-        config: ConfigSinkBenchmark,
+        config: ConfigSinkVoid,
         control_handle_receiver: ControlHandleReceiver,
         cdc_stream: CdcStream,
     ) -> Self {
@@ -27,7 +27,7 @@ impl SinkBenchmark {
 
     pub fn run(mut self) {
         ::tokio::spawn(async move {
-            self.run_inner().await.expect("sink benchmark panic");
+            self.run_inner().await.expect("sink void panic");
         });
 
         ::tokio::spawn(async move {

@@ -16,7 +16,7 @@ pub fn create_config() -> Config {
             cols: vec![0],
             database: "foo".to_string(),
         }],
-        sink_benchmark: None,
+        sink_void: None,
     }
 }
 

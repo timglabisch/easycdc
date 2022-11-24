@@ -5,4 +5,4 @@ database = "foo"
 table = "foo1"
 cols = [0]
 
-[sink_benchmark]
+[sink_void]
