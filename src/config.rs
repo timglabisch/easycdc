@@ -12,7 +12,7 @@ pub struct ConfigTable {
 pub struct Config {
     pub table: Vec<ConfigTable>,
     pub connection: String,
-    pub sink_benchmark: Vec<ConfigSinkBenchmark>
+    pub sink_benchmark: Option<ConfigSinkBenchmark>
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -12,10 +12,10 @@ pub fn sinks_initialize(
     control_handle_receiver : ControlHandleReceiver,
     cdc_stream :CdcStream,
 ) {
-    for sink_benchmark_config in &config.sink_benchmark {
+    if let Some(ref sink_benchmark) = config.sink_benchmark {
         SinkBenchmark::new(
-            sink_benchmark_config.clone(),
-            control_handle_receiver.clone(),
+            sink_benchmark.clone(),
+            control_handle_receiver,
             cdc_stream.clone()
         ).run();
     }

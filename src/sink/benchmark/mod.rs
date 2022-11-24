@@ -1,3 +1,4 @@
+use std::time::Duration;
 use crate::cdc::CdcStream;
 use crate::config::ConfigSinkBenchmark;
 use crate::control_handle::ControlHandleReceiver;
@@ -28,8 +29,13 @@ impl SinkBenchmark {
     }
 
     pub async fn run_inner(&mut self) -> Result<(), ::anyhow::Error> {
+        let sleep = ::tokio::time::sleep(Duration::from_secs(1));
         loop {
-            let _ = self.cdc_stream.recv().await?;
+            ::tokio::select! {
+                msg = self.cdc_stream.recv() => {
+
+                }
+            };
         }
     }
 }
