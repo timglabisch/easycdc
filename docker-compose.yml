@@ -1,0 +1,28 @@
+version: '3'
+
+services:
+  mysql:
+    image: mysql/mysql-server:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - '33069:3306'
+    volumes:
+      - ./easycdc/docker/mysql/my.cnf:/etc/my.cnf
+
+  some-scylla:
+    image: scylladb/scylla
+    container_name: easycdc_some-scylla
+    ports:
+      - '9042:9042'
+
+  some-scylla2:
+    image: scylladb/scylla
+    container_name: some-scylla2
+    command: --seeds=easycdc_some-scylla
+
+  some-scylla3:
+    image: scylladb/scylla
+    container_name: some-scylla3
+    command: --seeds=easycdc_some-scylla
