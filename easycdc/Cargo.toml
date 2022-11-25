@@ -1,0 +1,24 @@
+[package]
+name = "easycdc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mysql = "*"
+anyhow = "1.0.60"
+fnv = "1.*"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+toml = "*"
+structopt = { version = "0.3", default-features = true }
+uuid = "1.*"
+mysql_common = "0.*"
+tokio = {version = "1.*", features = ["full"]}
+lazy_static = "1.*"
+sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "mysql" ] }
+async-channel = "*"
+minstant = "0.1.*"
+chrono = "0.*"

@@ -1,5 +1,5 @@
 start_mysql:
-	docker run --rm \
+	cd easycdc; docker run --rm \
 		-e "MYSQL_ROOT_PASSWORD=password" \
 		-e "MYSQL_ROOT_HOST=%" \
 		-p "33069:3306" \
@@ -7,7 +7,7 @@ start_mysql:
 		mysql/mysql-server:latest
 
 run:
-	cargo run -- easycdc.toml
+	cd easycdc; cargo run -- easycdc.toml
 
 test:
-	docker kill easycdc_integration_1; cargo test -- --test-threads=1
+	cd easycdc && docker kill easycdc_integration_1; cargo test -- --test-threads=1
