@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 use structopt::StructOpt;
+use crate::benchmark::benchmark_outputter::BenchmarkOutputter;
 use crate::cdc::CdcRunner;
 use crate::control_handle::ControlHandle;
 use crate::sink::sinks_initialize;
@@ -44,6 +45,7 @@ async fn main() -> Result<(), ::anyhow::Error> {
     let mut cdc_stream = CdcRunner::new(control_handle_recv.clone(), config.clone()).run().await;
 
     sinks_initialize(config, control_handle_recv, cdc_stream);
+    BenchmarkOutputter::run();
 
     // wait ...
     ::tokio::time::sleep(Duration::from_secs(100)).await;
