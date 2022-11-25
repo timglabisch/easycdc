@@ -29,17 +29,6 @@ impl SinkVoid {
         ::tokio::spawn(async move {
             self.run_inner().await.expect("sink void panic");
         });
-
-        ::tokio::spawn(async move {
-            let mut sleep = ::tokio::time::sleep(Duration::from_secs(1));
-            loop {
-                let number_if_items = COUNTER.swap(0, Ordering::Relaxed);
-                sleep.await;
-                sleep = ::tokio::time::sleep(Duration::from_secs(1));
-
-                println!("Binlog Items {}", number_if_items);
-            }
-        });
     }
 
     pub async fn run_inner(&mut self) -> Result<(), ::anyhow::Error> {

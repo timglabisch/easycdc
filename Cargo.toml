@@ -21,3 +21,4 @@ lazy_static = "1.*"
 sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "mysql" ] }
 async-channel = "*"
 minstant = "0.1.*"
+chrono = "0.*"

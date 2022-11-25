@@ -1,10 +1,10 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use crate::benchmark::{PERF_COUNTER_BINLOG_EVENT_GTID, PERF_COUNTER_BINLOG_EVENT_OTHER, PERF_COUNTER_BINLOG_EVENT_QUERY, PERF_COUNTER_BINLOG_EVENT_ROWS, PERF_COUNTER_BINLOG_EVENT_TABLEMAP, PERF_COUNTER_BINLOG_EVENT_XID, PERF_COUNTER_BINLOG_EVENTS, PERF_COUNTER_TABLE_SKIP, PERF_TIMER_BINLOG_FINISH, PERF_TIMER_BINLOG_READ_WAIT, PERF_TIMER_BINLOG_ROWS_EVENT};
+use chrono::prelude::*;
 
-pub struct BenchmarkOutputter {
 
-}
+pub struct BenchmarkOutputter {}
 
 impl BenchmarkOutputter {
     pub fn run() {
@@ -29,20 +29,20 @@ impl BenchmarkOutputter {
             let perf_counter_binlog_event_other = PERF_COUNTER_BINLOG_EVENT_OTHER.swap(0, Ordering::Relaxed);
             let perf_counter_table_skip = PERF_COUNTER_TABLE_SKIP.swap(0, Ordering::Relaxed);
 
-            print!(
-                "perf_counter_binlog_events: {perf_counter_binlog_events}\n
-                perf_timer_binlog_read_wait: {perf_timer_binlog_read_wait}\n
-                perf_timer_binlog_finish: {perf_timer_binlog_finish}\n
-                perf_counter_binlog_event_tablemap: {perf_counter_binlog_event_tablemap}\n
-                perf_timer_binlog_rows_event: {perf_timer_binlog_rows_event}\n
-                perf_counter_binlog_event_rows: {perf_counter_binlog_event_rows}\n
-                perf_counter_binlog_event_xid: {perf_counter_binlog_event_xid}\n
-                perf_counter_binlog_event_gtid: {perf_counter_binlog_event_gtid}\n
-                perf_counter_binlog_event_query: {perf_counter_binlog_event_query}\n
-                perf_counter_binlog_event_other: {perf_counter_binlog_event_other}\n
-                perf_counter_table_skip: {perf_counter_table_skip}\n"
-            );
+            let now: DateTime<Utc> = Utc::now();
 
+            println!("----");
+            println!("{now} perf_counter_binlog_events: {perf_counter_binlog_events}");
+            println!("{now} perf_timer_binlog_read_wait: {perf_timer_binlog_read_wait}");
+            println!("{now} perf_timer_binlog_finish: {perf_timer_binlog_finish}");
+            println!("{now} perf_counter_binlog_event_tablemap: {perf_counter_binlog_event_tablemap}");
+            println!("{now} perf_timer_binlog_rows_event: {perf_timer_binlog_rows_event}");
+            println!("{now} perf_counter_binlog_event_rows: {perf_counter_binlog_event_rows}");
+            println!("{now} perf_counter_binlog_event_xid: {perf_counter_binlog_event_xid}");
+            println!("{now} perf_counter_binlog_event_gtid: {perf_counter_binlog_event_gtid}");
+            println!("{now} perf_counter_binlog_event_query: {perf_counter_binlog_event_query}");
+            println!("{now} perf_counter_binlog_event_other: {perf_counter_binlog_event_other}");
+            println!("{now} perf_counter_table_skip: {perf_counter_table_skip}");
         }
     }
 }
