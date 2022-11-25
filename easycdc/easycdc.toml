@@ -1,8 +1,33 @@
-connection = "mysql://root:password@localhost:33069/foo"
+connection = "mysql://root:password@localhost:33069"
 
 [[table]]
 database = "foo"
 table = "foo1"
+cols = [0]
+
+[[table]]
+database = "_easycdc_bench"
+table = "worker_0"
+cols = [0]
+
+[[table]]
+database = "_easycdc_bench"
+table = "worker_1"
+cols = [0]
+
+[[table]]
+database = "_easycdc_bench"
+table = "worker_2"
+cols = [0]
+
+[[table]]
+database = "_easycdc_bench"
+table = "worker_3"
+cols = [0]
+
+[[table]]
+database = "_easycdc_bench"
+table = "worker_4"
 cols = [0]
 
 [sink_void]

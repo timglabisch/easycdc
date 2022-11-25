@@ -1204,6 +1204,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mysql_benchmark"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "mysql_common"
 version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
