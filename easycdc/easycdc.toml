@@ -30,4 +30,5 @@ database = "_easycdc_bench"
 table = "worker_4"
 cols = [0]
 
-[sink_void]
+[sink_scylla]
+connection = "127.0.0.1:9042"

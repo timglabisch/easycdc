@@ -6,6 +6,7 @@ use crate::sink::void::SinkVoid;
 
 pub mod console;
 pub mod void;
+pub mod scylla;
 
 pub fn sinks_initialize(
     config : Config,

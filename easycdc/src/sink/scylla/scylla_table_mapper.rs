@@ -1,0 +1,43 @@
+use std::collections::HashMap;
+use scylla::Session;
+
+pub struct ScyllaTableMapper {
+    map: HashMap<(String, String), ()>
+}
+
+impl ScyllaTableMapper {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    pub async fn insert(
+        &mut self,
+        session: &mut Session,
+        table_name: &str,
+        server_uuid: &str
+    ) -> Result<(), ::anyhow::Error> {
+        if self.inner_exists(table_name, server_uuid) {
+            return Ok(());
+        }
+
+        session
+            .query("INSERT INTO easycdc.meta (table_name, server_uuid) VALUES (?, ?) IF NOT EXISTS", (
+                table_name, server_uuid
+            ))
+            .await?;
+
+        self.insert_mem(table_name, server_uuid);
+
+        Ok(())
+    }
+
+    fn inner_exists(&self, table_name: &str, server_uuid: &str) -> bool {
+        self.map.get(&(table_name.to_string(), server_uuid.to_string())).is_some()
+    }
+
+    pub fn insert_mem(&mut self, table_name: &str, server_uuid: &str) {
+        self.map.insert((table_name.to_string(), server_uuid.to_string()), ());
+    }
+}
