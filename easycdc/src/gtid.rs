@@ -1,15 +1,15 @@
 use std::str::FromStr;
 
-pub fn format_gtid(uuid: [u8; 16]) -> String {
+pub fn format_gtid(uuid: &[u8; 16]) -> String {
     let mut buf = [b'!'; 40];
-    ::uuid::Uuid::from_slice(&uuid)
+    ::uuid::Uuid::from_slice(uuid)
         .expect("invalid uuid")
         .braced()
         .encode_lower(&mut buf)
         .to_string()
 }
 
-pub fn format_gtid_for_table(uuid: [u8; 16]) -> String {
+pub fn format_gtid_for_table(uuid: &[u8; 16]) -> String {
     format_gtid(uuid)
         .trim_matches('{')
         .trim_matches('}')

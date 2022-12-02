@@ -1,4 +1,5 @@
 use anyhow::Context;
+use md5::Digest;
 use scylla::{FromRow, IntoTypedRows, Session, SessionBuilder};
 use crate::cdc::{CdcStream, CdcStreamItem, CdcStreamItemGtid, CdcStreamItemValue};
 use crate::control_handle::ControlHandleReceiver;
@@ -8,8 +9,10 @@ use serde_derive::Deserialize;
 
 mod scylla_table_mapper;
 
-pub fn scylla_format_table_name(raw_table_name: &str) -> String {
-    raw_table_name.replace(".", "_")
+pub fn scylla_format_table_name(raw_table_name: &str, uuid: &[u8; 16]) -> String {
+    let mut hasher = md5::Md5::default();
+    hasher.update(format!("{}{}",raw_table_name, format_gtid_for_table(uuid)));
+    format!("s_{}", base16ct::lower::encode_string(&hasher.finalize()))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,7 +79,7 @@ impl SinkScylla {
 
             let current_gtid = current_gtid.as_ref().expect("there must be a current gtid!");
 
-            tablemap.insert(&mut session, &scylla_format_table_name(&value.table_name), current_gtid.uuid).await.context("tablemap insert")?;
+            tablemap.insert(&mut session, &value.table_name, current_gtid.uuid).await.context("tablemap insert")?;
 
             Self::write_to_db(&mut session, row_sequence_number, value, current_gtid).await.context("write to db")?;
         }
@@ -85,9 +88,8 @@ impl SinkScylla {
     async fn write_to_db(session : &mut Session, row_sequence_number: i32, value: CdcStreamItemValue, gtid: &CdcStreamItemGtid) -> Result<(), ::anyhow::Error> {
 
         let query = format!(
-            "INSERT INTO easycdc.stream_{}_{} (sequence_number, row_sequence_number, data) VALUES (?, ?, ?) IF NOT EXISTS",
-            scylla_format_table_name(&value.table_name),
-            format_gtid_for_table(gtid.uuid)
+            "INSERT INTO easycdc.{} (sequence_number, row_sequence_number, data) VALUES (?, ?, ?) IF NOT EXISTS",
+            scylla_format_table_name(&value.table_name, &gtid.uuid)
         );
 
         session.query(query, &(gtid.sequence_number as i64, row_sequence_number, value.data)).await?;
@@ -104,7 +106,8 @@ impl SinkScylla {
                 "CREATE TABLE IF NOT EXISTS easycdc.meta (
   table_name text,
   server_uuid text,
-  PRIMARY KEY (table_name, server_uuid));",
+  scylla_table text,
+  PRIMARY KEY (table_name, server_uuid, scylla_table));",
                 &[],
             )
             .await?;

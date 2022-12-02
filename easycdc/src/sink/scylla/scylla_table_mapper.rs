@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use anyhow::Context;
 use scylla::Session;
 use crate::gtid::{format_gtid, format_gtid_for_table, format_gtid_reverse};
+use crate::sink::scylla::scylla_format_table_name;
 
 pub struct ScyllaTableMapper {
     map: HashMap<(String, [u8; 16]), ()>
@@ -25,11 +26,11 @@ impl ScyllaTableMapper {
         }
 
         {
-            let query = format!("CREATE TABLE IF NOT EXISTS easycdc.stream_{}_{} (
+            let query = format!("CREATE TABLE IF NOT EXISTS easycdc.{} (
   sequence_number BIGINT,
   row_sequence_number INT,
   data text,
-  PRIMARY KEY (sequence_number));", table_name, format_gtid_for_table(server_uuid));
+  PRIMARY KEY (sequence_number));", scylla_format_table_name(table_name, &server_uuid));
 
             println!("{}", query);
             session
@@ -39,8 +40,8 @@ impl ScyllaTableMapper {
         }
 
         session
-            .query("INSERT INTO easycdc.meta (table_name, server_uuid) VALUES (?, ?) IF NOT EXISTS", (
-                table_name, format_gtid_for_table(server_uuid)
+            .query("INSERT INTO easycdc.meta (table_name, server_uuid, scylla_table) VALUES (?, ?, ?) IF NOT EXISTS", (
+                table_name, format_gtid_for_table(&server_uuid), scylla_format_table_name(table_name, &server_uuid)
             ))
             .await.context("insert into meta")?;
 

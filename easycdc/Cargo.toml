@@ -23,3 +23,5 @@ async-channel = "*"
 minstant = "0.1.*"
 chrono = "0.*"
 scylla = "0.6.*"
+md-5 = "0.*"
+base16ct = { version = "0.1.1", features = ["alloc"] }
