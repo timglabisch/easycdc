@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use anyhow::Context;
 use scylla::Session;
-use crate::gtid::{format_gtid, format_gtid_reverse};
+use crate::gtid::{format_gtid, format_gtid_for_table, format_gtid_reverse};
 
 pub struct ScyllaTableMapper {
     map: HashMap<(String, [u8; 16]), ()>
@@ -28,17 +29,20 @@ impl ScyllaTableMapper {
   sequence_number BIGINT,
   row_sequence_number INT,
   data text,
-  PRIMARY KEY (sequence_number));", table_name, format_gtid(server_uuid));
+  PRIMARY KEY (sequence_number));", table_name, format_gtid_for_table(server_uuid));
+
+            println!("{}", query);
             session
-                .query(query, (table_name, format_gtid(server_uuid)))
-                .await?;
+                .query(query, &[])
+                .await.context("create stream table")?;
+
         }
 
         session
             .query("INSERT INTO easycdc.meta (table_name, server_uuid) VALUES (?, ?) IF NOT EXISTS", (
-                table_name, format_gtid(server_uuid)
+                table_name, format_gtid_for_table(server_uuid)
             ))
-            .await?;
+            .await.context("insert into meta")?;
 
         self.insert_mem(table_name, server_uuid);
 

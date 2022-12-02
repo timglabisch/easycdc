@@ -2,6 +2,7 @@ use crate::cdc::CdcStream;
 use crate::config;
 use crate::config::Config;
 use crate::control_handle::ControlHandleReceiver;
+use crate::sink::scylla::{ConfigSinkScylla, SinkScylla};
 use crate::sink::void::SinkVoid;
 
 pub mod console;
@@ -13,9 +14,15 @@ pub fn sinks_initialize(
     control_handle_receiver : ControlHandleReceiver,
     cdc_stream :CdcStream,
 ) {
-    if let Some(ref sink_benchmark) = config.sink_void {
+    if let Some(ref config) = config.sink_void {
         SinkVoid::new(
-            sink_benchmark.clone(),
+            config.clone(),
+            control_handle_receiver,
+            cdc_stream.clone()
+        ).run();
+    } else if let Some(ref config) = config.sink_scylla {
+        SinkScylla::new(
+            config.clone(),
             control_handle_receiver,
             cdc_stream.clone()
         ).run();

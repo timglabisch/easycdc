@@ -1,11 +1,18 @@
+use anyhow::Context;
 use scylla::{FromRow, IntoTypedRows, Session, SessionBuilder};
 use crate::cdc::{CdcStream, CdcStreamItem, CdcStreamItemGtid, CdcStreamItemValue};
 use crate::control_handle::ControlHandleReceiver;
-use crate::gtid::{format_gtid, format_gtid_reverse};
+use crate::gtid::{format_gtid, format_gtid_for_table, format_gtid_reverse};
 use crate::sink::scylla::scylla_table_mapper::ScyllaTableMapper;
+use serde_derive::Deserialize;
 
 mod scylla_table_mapper;
 
+pub fn scylla_format_table_name(raw_table_name: &str) -> String {
+    raw_table_name.replace(".", "_")
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ConfigSinkScylla {
     connection: String,
 }
@@ -32,7 +39,13 @@ impl SinkScylla {
     pub fn run(mut self) {
 
         ::tokio::spawn(async move {
-            self.run_inner().await.expect("sink void panic");
+            match self.run_inner().await.context("sink scylla panic") {
+                Ok(()) => unreachable!(),
+                Err(e) => {
+                    e.chain().skip(1).for_each(|cause| eprintln!("because: {}", cause));
+                    std::process::exit(1);
+                }
+            }
         });
     }
 
@@ -48,7 +61,7 @@ impl SinkScylla {
         let mut current_gtid = None;
         let mut row_sequence_number = 0;
         loop {
-            let stream_item = self.cdc_stream.recv().await?;
+            let stream_item = self.cdc_stream.recv().await.context("read stream item")?;
 
             let value = match stream_item {
                 CdcStreamItem::Gtid(gtid) => {
@@ -63,9 +76,9 @@ impl SinkScylla {
 
             let current_gtid = current_gtid.as_ref().expect("there must be a current gtid!");
 
-            tablemap.insert(&mut session, &value.table_name, current_gtid.uuid).await?;
+            tablemap.insert(&mut session, &scylla_format_table_name(&value.table_name), current_gtid.uuid).await.context("tablemap insert")?;
 
-            Self::write_to_db(&mut session, row_sequence_number, value, current_gtid).await?;
+            Self::write_to_db(&mut session, row_sequence_number, value, current_gtid).await.context("write to db")?;
         }
     }
 
@@ -73,8 +86,8 @@ impl SinkScylla {
 
         let query = format!(
             "INSERT INTO easycdc.stream_{}_{} (sequence_number, row_sequence_number, data) VALUES (?, ?, ?) IF NOT EXISTS",
-            value.table_name,
-            format_gtid(gtid.uuid)
+            scylla_format_table_name(&value.table_name),
+            format_gtid_for_table(gtid.uuid)
         );
 
         session.query(query, &(gtid.sequence_number as i64, row_sequence_number, value.data)).await?;

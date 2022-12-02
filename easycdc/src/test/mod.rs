@@ -17,6 +17,7 @@ pub fn create_config() -> Config {
             database: "foo".to_string(),
         }],
         sink_void: None,
+        sink_scylla: None,
     }
 }
 

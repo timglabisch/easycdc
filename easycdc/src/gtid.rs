@@ -9,6 +9,13 @@ pub fn format_gtid(uuid: [u8; 16]) -> String {
         .to_string()
 }
 
+pub fn format_gtid_for_table(uuid: [u8; 16]) -> String {
+    format_gtid(uuid)
+        .trim_matches('{')
+        .trim_matches('}')
+        .replace("-", "")
+}
+
 pub fn format_gtid_reverse(uuid: &str) -> [u8; 16] {
     let mut buf : [u8; 16] = [0; 16];
     let mut data = ::uuid::Uuid::from_str(uuid).expect("invalid uuid");

@@ -1,5 +1,6 @@
 use anyhow::Context;
 use serde_derive::Deserialize;
+use crate::sink::scylla::ConfigSinkScylla;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConfigTable {
@@ -12,7 +13,8 @@ pub struct ConfigTable {
 pub struct Config {
     pub table: Vec<ConfigTable>,
     pub connection: String,
-    pub sink_void: Option<ConfigSinkVoid>
+    pub sink_void: Option<ConfigSinkVoid>,
+    pub sink_scylla: Option<ConfigSinkScylla>
 }
 
 #[derive(Debug, Clone, Deserialize)]
