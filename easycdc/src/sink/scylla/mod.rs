@@ -1,7 +1,7 @@
 use scylla::{FromRow, IntoTypedRows, Session, SessionBuilder};
-use crate::cdc::{CdcStream, CdcStreamItem};
+use crate::cdc::{CdcStream, CdcStreamItem, CdcStreamItemGtid, CdcStreamItemValue};
 use crate::control_handle::ControlHandleReceiver;
-use crate::gtid::format_gtid_reverse;
+use crate::gtid::{format_gtid, format_gtid_reverse};
 use crate::sink::scylla::scylla_table_mapper::ScyllaTableMapper;
 
 mod scylla_table_mapper;
@@ -46,21 +46,40 @@ impl SinkScylla {
 
 
         let mut current_gtid = None;
+        let mut row_sequence_number = 0;
         loop {
             let stream_item = self.cdc_stream.recv().await?;
 
             let value = match stream_item {
                 CdcStreamItem::Gtid(gtid) => {
+                    row_sequence_number = 0;
                     current_gtid = Some(gtid);
                     continue;
                 },
                 CdcStreamItem::Value(value) => value,
             };
 
+            row_sequence_number = row_sequence_number + 1;
+
             let current_gtid = current_gtid.as_ref().expect("there must be a current gtid!");
 
-            tablemap.insert(&mut session, &value.table_name, current_gtid.uuid);
+            tablemap.insert(&mut session, &value.table_name, current_gtid.uuid).await?;
+
+            Self::write_to_db(&mut session, row_sequence_number, value, current_gtid).await?;
         }
+    }
+
+    async fn write_to_db(session : &mut Session, row_sequence_number: i32, value: CdcStreamItemValue, gtid: &CdcStreamItemGtid) -> Result<(), ::anyhow::Error> {
+
+        let query = format!(
+            "INSERT INTO easycdc.stream_{}_{} (sequence_number, row_sequence_number, data) VALUES (?, ?, ?) IF NOT EXISTS",
+            value.table_name,
+            format_gtid(gtid.uuid)
+        );
+
+        session.query(query, &(gtid.sequence_number as i64, row_sequence_number, value.data)).await?;
+
+        Ok(())
     }
 
     async fn initialize(session : &mut Session) -> Result<(), ::anyhow::Error> {
