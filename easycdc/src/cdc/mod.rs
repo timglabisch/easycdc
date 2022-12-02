@@ -20,10 +20,15 @@ pub struct CdcStreamItemGtid {
 
 #[derive(Debug)]
 pub enum CdcStreamItem {
-    Value(String),
+    Value(CdcStreamItemValue),
     Gtid(CdcStreamItemGtid),
 }
 
+#[derive(Debug)]
+pub struct CdcStreamItemValue {
+    pub table_name: String,
+    pub data: String,
+}
 
 pub struct CdcRunner {
     pub config: Config,
@@ -190,6 +195,7 @@ impl CdcRunner {
         row_event: &RowsEventData,
         cdc_stream_sender: &::async_channel::Sender<CdcStreamItem>
     ) {
+
         let table_info = match tablemap.get_cdc_info(&row_event.table_id()) {
             None => {
                 PERF_COUNTER_TABLE_SKIP.fetch_add(1, Ordering::Relaxed);
@@ -225,7 +231,10 @@ impl CdcRunner {
             );
 
             cdc_stream_sender
-                .try_send(CdcStreamItem::Value(v.to_json().to_string()))
+                .try_send(CdcStreamItem::Value(CdcStreamItemValue {
+                    table_name: v.get_table_name(),
+                    data: v.to_json().to_string(),
+                }))
                 .context("could not send to channel").expect("channel!")
         }
     }

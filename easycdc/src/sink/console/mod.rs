@@ -43,6 +43,11 @@ impl<'a> SinkConsoleJsonValue<'a> {
 }
 
 impl<'a> SinkConsoleJsonValue<'a> {
+
+    pub fn get_table_name(&self) -> String {
+        format!("{}.{}", self.table_map_event.database_name(), self.table_map_event.table_name())
+    }
+
     pub fn to_json(&self) -> serde_json::Value {
         let db = self.table_map_event.database_name();
         let table = self.table_map_event.table_name();

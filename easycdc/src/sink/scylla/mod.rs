@@ -1,6 +1,7 @@
 use scylla::{FromRow, IntoTypedRows, Session, SessionBuilder};
-use crate::cdc::CdcStream;
+use crate::cdc::{CdcStream, CdcStreamItem};
 use crate::control_handle::ControlHandleReceiver;
+use crate::gtid::format_gtid_reverse;
 use crate::sink::scylla::scylla_table_mapper::ScyllaTableMapper;
 
 mod scylla_table_mapper;
@@ -41,11 +42,24 @@ impl SinkScylla {
 
         let mut session: Session = SessionBuilder::new().known_node(&self.config.connection).build().await?;
         Self::initialize(&mut session).await?;
-        Self::build_scylla_tablemap(&mut session).await?;
+        let mut tablemap = Self::build_scylla_tablemap(&mut session).await?;
 
 
+        let mut current_gtid = None;
         loop {
-            let _ = self.cdc_stream.recv().await?;
+            let stream_item = self.cdc_stream.recv().await?;
+
+            let value = match stream_item {
+                CdcStreamItem::Gtid(gtid) => {
+                    current_gtid = Some(gtid);
+                    continue;
+                },
+                CdcStreamItem::Value(value) => value,
+            };
+
+            let current_gtid = current_gtid.as_ref().expect("there must be a current gtid!");
+
+            tablemap.insert(&mut session, &value.table_name, current_gtid.uuid);
         }
     }
 
@@ -79,7 +93,7 @@ impl SinkScylla {
             for row_data in rows.into_typed::<RowData>() {
                 let row_data = row_data?;
 
-                tablemap.insert_mem(&row_data.table_name, &row_data.server_uuid);
+                tablemap.insert_mem(&row_data.table_name, format_gtid_reverse(&row_data.server_uuid));
             }
         }
 

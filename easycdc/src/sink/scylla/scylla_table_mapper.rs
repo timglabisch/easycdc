@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use scylla::Session;
+use crate::gtid::format_gtid;
 
 pub struct ScyllaTableMapper {
-    map: HashMap<(String, String), ()>
+    map: HashMap<(String, [u8; 16]), ()>
 }
 
 impl ScyllaTableMapper {
@@ -16,7 +17,7 @@ impl ScyllaTableMapper {
         &mut self,
         session: &mut Session,
         table_name: &str,
-        server_uuid: &str
+        server_uuid: [u8; 16],
     ) -> Result<(), ::anyhow::Error> {
         if self.inner_exists(table_name, server_uuid) {
             return Ok(());
@@ -24,7 +25,7 @@ impl ScyllaTableMapper {
 
         session
             .query("INSERT INTO easycdc.meta (table_name, server_uuid) VALUES (?, ?) IF NOT EXISTS", (
-                table_name, server_uuid
+                table_name, format_gtid(server_uuid)
             ))
             .await?;
 
@@ -33,11 +34,11 @@ impl ScyllaTableMapper {
         Ok(())
     }
 
-    fn inner_exists(&self, table_name: &str, server_uuid: &str) -> bool {
-        self.map.get(&(table_name.to_string(), server_uuid.to_string())).is_some()
+    fn inner_exists(&self, table_name: &str, server_uuid: [u8; 16]) -> bool {
+        self.map.get(&(table_name.to_string(), server_uuid)).is_some()
     }
 
-    pub fn insert_mem(&mut self, table_name: &str, server_uuid: &str) {
-        self.map.insert((table_name.to_string(), server_uuid.to_string()), ());
+    pub fn insert_mem(&mut self, table_name: &str, server_uuid: [u8; 16]) {
+        self.map.insert((table_name.to_string(), server_uuid), ());
     }
 }

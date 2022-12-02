@@ -200,17 +200,17 @@ pub async fn test_runnter(flow_items: Vec<TestFlow>) {
 
                 mysql.stop_cdc().await;
                 mysql.stop_mysql().await;
-                assert_eq!("", v)
+                assert_eq!("", v.data)
             }
             TestFlow::Expect(expect) => {
                 loop {
                     match cdc_stream.recv().await.expect("stream error") {
                         CdcStreamItem::Value(v) => {
-                            if expect != v {
+                            if expect != v.data {
                                 mysql.stop_cdc().await;
                                 mysql.stop_mysql().await;
                             }
-                            assert_eq!(expect, v);
+                            assert_eq!(expect, v.data);
                             break;
                         }
                         CdcStreamItem::Gtid(gtid) => {
