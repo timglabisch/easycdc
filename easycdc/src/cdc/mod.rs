@@ -13,19 +13,22 @@ use crate::control_handle::{ControlHandle, ControlHandleReceiver};
 pub enum CdcRunnerControlMsg {}
 
 #[derive(Debug)]
-pub struct CdcStreamItemGtid {
+pub struct CdcStreamItemGtidEvent {
     pub uuid: [u8; 16],
     pub sequence_number: u64,
+    pub immediate_commit_timestamp: u64,
+    pub original_commit_timestamp: u64,
 }
 
 #[derive(Debug)]
 pub enum CdcStreamItem {
     Value(CdcStreamItemValue),
-    Gtid(CdcStreamItemGtid),
+    Gtid(CdcStreamItemGtidEvent),
 }
 
 #[derive(Debug)]
 pub struct CdcStreamItemValue {
+    pub primary_keys: Vec<String>,
     pub table_name: String,
     pub database_name: String,
     pub data: String,
@@ -171,9 +174,11 @@ impl CdcRunner {
                     // dbg!(gtid_event.sequence_number());
 
                     cdc_stream_sender
-                        .try_send(CdcStreamItem::Gtid(CdcStreamItemGtid {
+                        .try_send(CdcStreamItem::Gtid(CdcStreamItemGtidEvent {
                             uuid: gtid_event.sid(),
                             sequence_number: gtid_event.sequence_number(),
+                            immediate_commit_timestamp: gtid_event.immediate_commit_timestamp(),
+                            original_commit_timestamp: gtid_event.original_commit_timestamp(),
                         }))
                         .context("could not send to channel");
                 }
@@ -233,6 +238,7 @@ impl CdcRunner {
 
             cdc_stream_sender
                 .try_send(CdcStreamItem::Value(CdcStreamItemValue {
+                    primary_keys: v.get_pks(),
                     table_name: v.get_table_name().to_string(),
                     database_name: v.get_database_name().to_string(),
                     data: v.to_json().to_string(),

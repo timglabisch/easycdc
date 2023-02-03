@@ -53,6 +53,30 @@ impl<'a> SinkConsoleJsonValue<'a> {
         self.table_map_event.database_name()
     }
 
+    pub fn get_pks(&self) -> Vec<String> {
+        let before = serde_json::json!(
+            self
+                .before
+                .iter()
+                .map(|v| Self::binlog_value_to_json(v))
+                .collect::<Vec<_>>()
+        ).to_string();
+
+        if self.before == self.after {
+            return vec![before];
+        }
+
+        let after = serde_json::json!(
+            self
+                .after
+                .iter()
+                .map(|v| Self::binlog_value_to_json(v))
+                .collect::<Vec<_>>()
+        ).to_string();
+
+        return vec![before, after];
+    }
+
     pub fn to_json(&self) -> serde_json::Value {
         let db = self.table_map_event.database_name();
         let table = self.table_map_event.table_name();

@@ -1,7 +1,8 @@
 use anyhow::Context;
 use md5::Digest;
 use scylla::{FromRow, IntoTypedRows, Session, SessionBuilder};
-use crate::cdc::{CdcStream, CdcStreamItem, CdcStreamItemGtid, CdcStreamItemValue};
+use scylla::frame::value::Timestamp;
+use crate::cdc::{CdcStream, CdcStreamItem, CdcStreamItemGtidEvent, CdcStreamItemValue};
 use crate::control_handle::ControlHandleReceiver;
 use crate::gtid::{format_gtid, format_gtid_for_table, format_gtid_reverse};
 use serde_derive::Deserialize;
@@ -78,18 +79,27 @@ impl SinkScylla {
         }
     }
 
-    async fn write_to_db(session : &mut Session, value: CdcStreamItemValue, gtid: &CdcStreamItemGtid, sequence_row: i64) -> Result<(), ::anyhow::Error> {
+    async fn write_to_db(session : &mut Session, value: CdcStreamItemValue, gtid: &CdcStreamItemGtidEvent, sequence_row: i64) -> Result<(), ::anyhow::Error> {
 
         let gtid_formatted = format_gtid(&gtid.uuid);
-        session.query(
-            "insert into easycdc.by_id (sequence_number, sequence_row, server_uuid, name_database, name_table, data) values (?, ?, ?, ?, ?, ?);",
-            &(gtid.sequence_number as i64, sequence_row,  gtid_formatted.clone(), value.database_name.clone(),  &value.table_name.clone(), value.data.clone())
-        ).await?;
+        let timestamp = Timestamp(::chrono::Duration::microseconds(gtid.immediate_commit_timestamp as i64));
 
         session.query(
-            "insert into easycdc.pk_by_id (name_database, name_table, pk, insert_at, deleted_at, last_update_sequence_number, last_update_timestamp) values (?, ?, ?, ?, ?, ?, ?);",
-            &(gtid.sequence_number as i64, sequence_row,  gtid_formatted, value.database_name,  value.table_name, value.data)
+            "insert into easycdc.sequence (sequence_number, sequence_row, timestamp, server_uuid, name_database, name_table, data) values (?, ?, ?, ?, ?, ?, ?);",
+            &(gtid.sequence_number as i64, sequence_row, timestamp.clone(),  gtid_formatted.clone(), value.database_name.clone(),  &value.table_name.clone(), value.data.clone())
         ).await?;
+
+        for primary_key in &value.primary_keys {
+
+            if primary_key == "[]" {
+                continue;
+            }
+
+            session.query(
+                "insert into easycdc.by_pk (name_database, name_table, pk, insert_at, deleted_at, last_update_sequence_number, last_update_timestamp) values (?, ?, ?, ?, ?, ?, ?);",
+                &(value.database_name.clone(), value.table_name.clone(), primary_key.to_string(), timestamp.clone(), timestamp.clone(),  gtid.sequence_number as i64, timestamp.clone())
+            ).await?;
+        }
 
         Ok(())
     }
@@ -98,7 +108,7 @@ impl SinkScylla {
 
         session.query("CREATE KEYSPACE IF NOT EXISTS easycdc WITH replication = {'class':'SimpleStrategy', 'replication_factor' : 3};", &[]).await?;
         session.query(r#"
-            CREATE TABLE IF NOT EXISTS easycdc.by_id (
+            CREATE TABLE IF NOT EXISTS easycdc.sequence (
              sequence_number BIGINT,
              sequence_row BIGINT,
              server_uuid text,
@@ -106,27 +116,27 @@ impl SinkScylla {
              name_database text,
              name_table text,
              data text,
-             PRIMARY KEY (sequence_number, server_uuid, sequence_row, timestamp)
+             PRIMARY KEY (sequence_number, server_uuid, sequence_row)
             );
         "#, &[]).await?;
         session.query(r#"
-            CREATE MATERIALIZED VIEW easycdc.by_date AS
-            SELECT * FROM foo.by_id
-            WHERE timestamp IS NOT NULL
-              AND sequence_row IS NOT NULL
-              AND server_uuid IS NOT NULL
-                PRIMARY KEY(timestamp, server_uuid, sequence_number, sequence_row);
-        "#, &[]).await?;
-        session.query(r#"
-            CREATE TABLE IF NOT EXISTS easycdc.pk_by_id (
+            CREATE TABLE IF NOT EXISTS easycdc.by_pk (
             name_database text,
             name_table text,
             pk text,
-            insert_at: TIMESTAMP,
-            deleted_at: TIMESTAMP,
+            insert_at TIMESTAMP,
+            deleted_at TIMESTAMP,
             last_update_sequence_number BIGINT,
             last_update_timestamp TIMESTAMP,
             PRIMARY KEY (pk, name_database, name_table));
+        "#, &[]).await?;
+        session.query(r#"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS easycdc.by_date AS
+            SELECT * FROM easycdc.by_pk
+            WHERE last_update_timestamp IS NOT NULL
+              AND name_database IS NOT NULL
+              AND name_table IS NOT NULL
+                PRIMARY KEY(name_database, name_table, last_update_timestamp, pk);
         "#, &[]).await?;
 
         Ok(())
