@@ -27,6 +27,7 @@ pub enum CdcStreamItem {
 #[derive(Debug)]
 pub struct CdcStreamItemValue {
     pub table_name: String,
+    pub database_name: String,
     pub data: String,
 }
 
@@ -232,7 +233,8 @@ impl CdcRunner {
 
             cdc_stream_sender
                 .try_send(CdcStreamItem::Value(CdcStreamItemValue {
-                    table_name: v.get_table_name(),
+                    table_name: v.get_table_name().to_string(),
+                    database_name: v.get_database_name().to_string(),
                     data: v.to_json().to_string(),
                 }))
                 .context("could not send to channel").expect("channel!")

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use mysql::{
     binlog::{events::TableMapEvent, row::BinlogRow, value::BinlogValue},
     Value,
@@ -44,8 +45,12 @@ impl<'a> SinkConsoleJsonValue<'a> {
 
 impl<'a> SinkConsoleJsonValue<'a> {
 
-    pub fn get_table_name(&self) -> String {
-        format!("{}.{}", self.table_map_event.database_name(), self.table_map_event.table_name())
+    pub fn get_table_name(&self) -> Cow<str> {
+        self.table_map_event.table_name()
+    }
+
+    pub fn get_database_name(&self) -> Cow<str> {
+        self.table_map_event.database_name()
     }
 
     pub fn to_json(&self) -> serde_json::Value {
@@ -63,8 +68,6 @@ impl<'a> SinkConsoleJsonValue<'a> {
             .collect::<Vec<_>>();
 
         serde_json::json!({
-            "db": db,
-            "table": table,
             "before": before,
             "after": after,
         })

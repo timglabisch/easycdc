@@ -11,4 +11,4 @@ run_benchmark:
 	cd mysql_benchmark && cargo run --release
 
 up:
-	docker compose up
+	docker compose up -d

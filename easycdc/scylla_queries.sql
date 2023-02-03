@@ -1,5 +1,4 @@
-CREATE KEYSPACE foo
-    WITH replication = {'class':'SimpleStrategy', 'replication_factor' : 3};
+CREATE KEYSPACE IF NOT EXISTS foo WITH replication = {'class':'SimpleStrategy', 'replication_factor' : 3};
 
 drop materialized view foo.by_date;
 drop table foo.by_id;

@@ -4,10 +4,7 @@ use scylla::{FromRow, IntoTypedRows, Session, SessionBuilder};
 use crate::cdc::{CdcStream, CdcStreamItem, CdcStreamItemGtid, CdcStreamItemValue};
 use crate::control_handle::ControlHandleReceiver;
 use crate::gtid::{format_gtid, format_gtid_for_table, format_gtid_reverse};
-use crate::sink::scylla::scylla_table_mapper::ScyllaTableMapper;
 use serde_derive::Deserialize;
-
-mod scylla_table_mapper;
 
 pub fn scylla_format_table_name(raw_table_name: &str, uuid: &[u8; 16]) -> String {
     let mut hasher = md5::Md5::default();
@@ -58,8 +55,6 @@ impl SinkScylla {
 
         let mut session: Session = SessionBuilder::new().known_node(&self.config.connection).build().await?;
         Self::initialize(&mut session).await?;
-        let mut tablemap = Self::build_scylla_tablemap(&mut session).await?;
-
 
         let mut current_gtid = None;
         let mut row_sequence_number = 0;
@@ -79,59 +74,61 @@ impl SinkScylla {
 
             let current_gtid = current_gtid.as_ref().expect("there must be a current gtid!");
 
-            tablemap.insert(&mut session, &value.table_name, current_gtid.uuid).await.context("tablemap insert")?;
-
-            Self::write_to_db(&mut session, row_sequence_number, value, current_gtid).await.context("write to db")?;
+            Self::write_to_db(&mut session, value, current_gtid, row_sequence_number).await.context("write to db")?;
         }
     }
 
-    async fn write_to_db(session : &mut Session, row_sequence_number: i32, value: CdcStreamItemValue, gtid: &CdcStreamItemGtid) -> Result<(), ::anyhow::Error> {
+    async fn write_to_db(session : &mut Session, value: CdcStreamItemValue, gtid: &CdcStreamItemGtid, sequence_row: i64) -> Result<(), ::anyhow::Error> {
 
-        let query = format!(
-            "INSERT INTO easycdc.{} (sequence_number, row_sequence_number, data) VALUES (?, ?, ?) IF NOT EXISTS",
-            scylla_format_table_name(&value.table_name, &gtid.uuid)
-        );
+        let gtid_formatted = format_gtid(&gtid.uuid);
+        session.query(
+            "insert into easycdc.by_id (sequence_number, sequence_row, server_uuid, name_database, name_table, data) values (?, ?, ?, ?, ?, ?);",
+            &(gtid.sequence_number as i64, sequence_row,  gtid_formatted.clone(), value.database_name.clone(),  &value.table_name.clone(), value.data.clone())
+        ).await?;
 
-        session.query(query, &(gtid.sequence_number as i64, row_sequence_number, value.data)).await?;
+        session.query(
+            "insert into easycdc.pk_by_id (name_database, name_table, pk, insert_at, deleted_at, last_update_sequence_number, last_update_timestamp) values (?, ?, ?, ?, ?, ?, ?);",
+            &(gtid.sequence_number as i64, sequence_row,  gtid_formatted, value.database_name,  value.table_name, value.data)
+        ).await?;
 
         Ok(())
     }
 
     async fn initialize(session : &mut Session) -> Result<(), ::anyhow::Error> {
 
-        session.query("CREATE KEYSPACE IF NOT EXISTS easycdc WITH REPLICATION = {'class' : 'SimpleStrategy', 'replication_factor' : 1}", &[]).await?;
-
-        session
-            .query(
-                "CREATE TABLE IF NOT EXISTS easycdc.meta (
-  table_name text,
-  server_uuid text,
-  scylla_table text,
-  PRIMARY KEY (table_name, server_uuid, scylla_table));",
-                &[],
-            )
-            .await?;
+        session.query("CREATE KEYSPACE IF NOT EXISTS easycdc WITH replication = {'class':'SimpleStrategy', 'replication_factor' : 3};", &[]).await?;
+        session.query(r#"
+            CREATE TABLE IF NOT EXISTS easycdc.by_id (
+             sequence_number BIGINT,
+             sequence_row BIGINT,
+             server_uuid text,
+             timestamp TIMESTAMP,
+             name_database text,
+             name_table text,
+             data text,
+             PRIMARY KEY (sequence_number, server_uuid, sequence_row, timestamp)
+            );
+        "#, &[]).await?;
+        session.query(r#"
+            CREATE MATERIALIZED VIEW easycdc.by_date AS
+            SELECT * FROM foo.by_id
+            WHERE timestamp IS NOT NULL
+              AND sequence_row IS NOT NULL
+              AND server_uuid IS NOT NULL
+                PRIMARY KEY(timestamp, server_uuid, sequence_number, sequence_row);
+        "#, &[]).await?;
+        session.query(r#"
+            CREATE TABLE IF NOT EXISTS easycdc.pk_by_id (
+            name_database text,
+            name_table text,
+            pk text,
+            insert_at: TIMESTAMP,
+            deleted_at: TIMESTAMP,
+            last_update_sequence_number BIGINT,
+            last_update_timestamp TIMESTAMP,
+            PRIMARY KEY (pk, name_database, name_table));
+        "#, &[]).await?;
 
         Ok(())
-    }
-
-    async fn build_scylla_tablemap(session : &mut Session) -> Result<ScyllaTableMapper, ::anyhow::Error> {
-        #[derive(Debug, FromRow)]
-        struct RowData {
-            table_name: String,
-            server_uuid: String,
-        }
-
-        let mut tablemap = ScyllaTableMapper::new();
-
-        if let Some(rows) = session.query("SELECT table_name, server_uuid FROM easycdc.meta", &[]).await?.rows {
-            for row_data in rows.into_typed::<RowData>() {
-                let row_data = row_data?;
-
-                tablemap.insert_mem(&row_data.table_name, format_gtid_reverse(&row_data.server_uuid));
-            }
-        }
-
-        Ok(tablemap)
     }
 }
