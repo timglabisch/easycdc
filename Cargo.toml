@@ -2,4 +2,6 @@
 members = [
     "easycdc",
     "mysql_benchmark",
+    "easycdc_scylla_subscriber",
+    "easycdc_mysql_tablesync"
 ]

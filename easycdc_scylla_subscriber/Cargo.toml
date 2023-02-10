@@ -1,0 +1,12 @@
+[package]
+name = "easycdc_scylla_subscriber"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = {version = "1.*", features = ["full"]}
+scylla = "0.7.0"
+anyhow = "*"
+futures = "0.3.*"

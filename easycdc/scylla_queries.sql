@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS easycdc.sequence (
     PRIMARY KEY (sequence_number, server_uuid, sequence_row)
 );
 
+select data from easycdc.sequence where server_uuid = '1' and name_database = '1' and name_table = '2' and sequence_number > 1;
+
 CREATE TABLE IF NOT EXISTS easycdc.by_pk (
  name_database text,
  name_table text,

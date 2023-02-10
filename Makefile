@@ -1,6 +1,9 @@
 run:
 	cd easycdc; cargo run -- easycdc.toml
 
+run_mysql_tablesync:
+	cd easycdc_mysql_tablesync; cargo run
+
 run_release:
 	cd easycdc; cargo run --release -- easycdc.toml
 
