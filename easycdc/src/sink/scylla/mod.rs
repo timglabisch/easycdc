@@ -96,8 +96,8 @@ impl SinkScylla {
             }
 
             session.query(
-                "insert into easycdc.by_pk (name_database, name_table, pk, insert_at, deleted_at, last_update_sequence_number, last_update_timestamp) values (?, ?, ?, ?, ?, ?, ?);",
-                &(value.database_name.clone(), value.table_name.clone(), primary_key.to_string(), timestamp.clone(), timestamp.clone(),  gtid.sequence_number as i64, timestamp.clone())
+                "insert into easycdc.by_pk (name_database, name_table, pk, insert_at, deleted_at, last_update_sequence_number, server_uuid, last_update_timestamp) values (?, ?, ?, ?, ?, ?, ?, ?);",
+                &(value.database_name.clone(), value.table_name.clone(), primary_key.to_string(), timestamp.clone(), timestamp.clone(),  gtid.sequence_number as i64, gtid_formatted.clone(), timestamp.clone())
             ).await?;
         }
 
@@ -116,7 +116,7 @@ impl SinkScylla {
              name_database text,
              name_table text,
              data text,
-             PRIMARY KEY (sequence_number, server_uuid, sequence_row)
+             PRIMARY KEY ((name_database, name_table, server_uuid), sequence_number, sequence_row)
             );
         "#, &[]).await?;
         session.query(r#"
@@ -126,9 +126,10 @@ impl SinkScylla {
             pk text,
             insert_at TIMESTAMP,
             deleted_at TIMESTAMP,
+            server_uuid text,
             last_update_sequence_number BIGINT,
             last_update_timestamp TIMESTAMP,
-            PRIMARY KEY (pk, name_database, name_table));
+            PRIMARY KEY ((pk, name_database, name_table)));
         "#, &[]).await?;
         session.query(r#"
             CREATE MATERIALIZED VIEW IF NOT EXISTS easycdc.by_date AS
@@ -136,7 +137,8 @@ impl SinkScylla {
             WHERE last_update_timestamp IS NOT NULL
               AND name_database IS NOT NULL
               AND name_table IS NOT NULL
-                PRIMARY KEY(name_database, name_table, last_update_timestamp, pk);
+              AND pk IS NOT NULL
+                PRIMARY KEY((name_database, name_table), last_update_timestamp, pk);
         "#, &[]).await?;
 
         Ok(())
