@@ -1,4 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use anyhow::Context;
+use chrono::Utc;
 use md5::Digest;
 use scylla::{FromRow, IntoTypedRows, Session, SessionBuilder};
 use scylla::frame::value::Timestamp;
@@ -22,6 +24,7 @@ pub struct SinkScylla {
     config: ConfigSinkScylla,
     control_handle_receiver: ControlHandleReceiver,
     cdc_stream: CdcStream,
+    sequence_servers: HashSet<(String, String, String)>
 }
 
 impl SinkScylla {
@@ -33,7 +36,8 @@ impl SinkScylla {
         Self {
             config,
             control_handle_receiver,
-            cdc_stream
+            cdc_stream,
+            sequence_servers: HashSet::new()
         }
     }
 
@@ -75,11 +79,11 @@ impl SinkScylla {
 
             let current_gtid = current_gtid.as_ref().expect("there must be a current gtid!");
 
-            Self::write_to_db(&mut session, value, current_gtid, row_sequence_number).await.context("write to db")?;
+            self.write_to_db(&mut session, value, current_gtid, row_sequence_number).await.context("write to db")?;
         }
     }
 
-    async fn write_to_db(session : &mut Session, value: CdcStreamItemValue, gtid: &CdcStreamItemGtidEvent, sequence_row: i64) -> Result<(), ::anyhow::Error> {
+    async fn write_to_db(&mut self, session : &mut Session, value: CdcStreamItemValue, gtid: &CdcStreamItemGtidEvent, sequence_row: i64) -> Result<(), ::anyhow::Error> {
 
         let gtid_formatted = format_gtid(&gtid.uuid);
         let timestamp = Timestamp(::chrono::Duration::microseconds(gtid.immediate_commit_timestamp as i64));
@@ -88,6 +92,14 @@ impl SinkScylla {
             "insert into easycdc.sequence (sequence_number, sequence_row, timestamp, server_uuid, name_database, name_table, data) values (?, ?, ?, ?, ?, ?, ?);",
             &(gtid.sequence_number as i64, sequence_row, timestamp.clone(),  gtid_formatted.clone(), value.database_name.clone(),  &value.table_name.clone(), value.data.clone())
         ).await?;
+
+        if !self.sequence_servers.contains(&(gtid_formatted.clone(), value.database_name.clone(),  value.table_name.clone())) {
+            session.query(
+                "insert into easycdc.sequence_servers (server_uuid, name_database, name_table, inserted) values (?, ?, ?, ?);",
+                &(gtid_formatted.clone(), value.database_name.clone(),  &value.table_name.clone(), Utc::now().timestamp())
+            ).await?;
+            self.sequence_servers.insert((gtid_formatted.clone(), value.database_name.clone(),  value.table_name.clone()));
+        }
 
         for primary_key in &value.primary_keys {
 
@@ -117,6 +129,15 @@ impl SinkScylla {
              name_table text,
              data text,
              PRIMARY KEY ((name_database, name_table, server_uuid), sequence_number, sequence_row)
+            );
+        "#, &[]).await?;
+        session.query(r#"
+            CREATE TABLE IF NOT EXISTS easycdc.sequence_servers (
+             name_database text,
+             name_table text,
+             server_uuid text,
+             inserted TIMESTAMP,
+             PRIMARY KEY ((name_database, name_table), server_uuid)
             );
         "#, &[]).await?;
         session.query(r#"
